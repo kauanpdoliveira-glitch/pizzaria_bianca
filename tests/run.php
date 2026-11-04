@@ -681,7 +681,7 @@ $mkStation = function (string $name, array $sectors) use ($u) {
     $id = PrintStation::create($name, $u);
     PrintStation::heartbeat($id, ['qz' => true, 'version' => '2.2.4', 'printers' => ['Cozinha-USB', 'Bar-USB', 'Balcao-LAN']], $u);
     $rows = []; foreach ($sectors as $s => $p) $rows[$s] = ['printer' => $p, 'cols' => 48, 'charset' => 'ascii', 'cut' => 1];
-    PrintStation::saveMap($id, $rows, $u);
+    PrintStation::saveMap($id, $rows, $u); PrintStation::control($id, 'arm', $u);
     return $id;
 };
 t('roteamento: pizza → cozinha, bebida → copa, resumo → balcão; sem comanda de setor vazio', function () use ($order, $key, $mix, $secOf, $pid) {
@@ -760,21 +760,21 @@ t('assinatura QZ: só o envio reservado/validado é assinado; repetição, outra
     $pm = fn(string $printer, string $b64) => ['printer' => ['name' => $printer], 'options' => ['copies' => 1], 'data' => [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => $b64]]];
     $j = PrintStation::claim($a);
     // reservado, ainda não "enviando": nada de print assinado
-    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['bytes_b64']))), 403);
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['payload']))), 403);
     PrintStation::markSending($a, $j['uuid']);
-    $good = $msg('print', $pm('Cozinha-USB', $j['bytes_b64']));
+    $good = $msg('print', $pm('Cozinha-USB', $j['payload']));
     $r = QzSigner::sign($st, $u, $good);
     eq(openssl_verify(hash('sha256', $good), base64_decode($r['signature']), $qzX0 = openssl_x509_read((string)QzSigner::certificate()), OPENSSL_ALGO_SHA512), 1, 'assinatura não confere com o certificado');
     throws(fn() => QzSigner::sign($st, $u, $good), 409);                                                        // repetição
-    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Bar-USB', $j['bytes_b64']))), 403);               // outra impressora
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Bar-USB', $j['payload']))), 403);               // outra impressora
     throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', base64_encode("\x1B@LIXO")))), 403); // outro conteúdo
-    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['bytes_b64']), (int)(microtime(true) * 1000) - 600000)), 403); // timestamp velho
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['payload']), (int)(microtime(true) * 1000) - 600000)), 403); // timestamp velho
     throws(fn() => QzSigner::sign($st, $u, $msg('file.read', ['path' => 'C:/x'])), 403);                          // chamada fora da lista
     throws(fn() => QzSigner::sign($st, $u, $msg('print', ['printer' => 'Cozinha-USB', 'data' => [['type' => 'pixel', 'data' => 'x']], 'extra' => 1])), 403);
     throws(fn() => QzSigner::sign($st, $u, 'não é json'), 403);
     eq(QzSigner::sign($st, $u, $msg('printers.find', []))['signature'] !== '', true);
     throws(fn() => QzSigner::sign($st, $u, $msg('printers.find', ['query' => str_repeat('x', 500)])), 403);
-    $pr = $msg('print', $pm('Cozinha-USB', $j['bytes_b64']));
+    $pr = $msg('print', $pm('Cozinha-USB', $j['payload']));
     PrintStation::setActive($a, false);
     throws(fn() => QzSigner::sign(PrintStation::get($a), $u, $pr), 403);                                        // estação desativada
     if ((int)Db::val("SELECT COUNT(*) FROM print_sign_log WHERE ok = 0") < 5) throw new Exception('recusas não registradas');
@@ -800,6 +800,74 @@ t('comanda de teste é marcada e não tem pedido', function () use ($u) {
     eq($j['order_id'], null); eq($j['kind'], 'test');
     $txt = implode("\n", array_column(Printing::build($j)['lines'], 't'));
     if (!str_contains($txt, 'TESTE - NAO PRODUZIR')) throw new Exception('sem marca de teste');
+});
+
+echo "Configuração flexível de impressoras\n";
+$realOpts = fn(array $over = []) => $over + ['bounds' => null, 'colorType' => 'color', 'copies' => 1, 'density' => 0, 'duplex' => false, 'fallbackDensity' => null, 'interpolation' => 'bicubic', 'jobName' => null, 'legacy' => false, 'margins' => 0, 'orientation' => null, 'paperThickness' => null, 'printerTray' => null, 'rasterize' => false, 'rotation' => 0, 'scaleContent' => true, 'size' => null, 'units' => 'in', 'forceRaw' => false, 'encoding' => null, 'spool' => null];
+$qzMsg = fn(string $printer, array $data, array $opts) => json_encode(['call' => 'print', 'params' => ['printer' => ['name' => $printer], 'options' => $opts, 'data' => $data], 'timestamp' => (int)(microtime(true) * 1000)]);
+t('assinatura aceita as opções REAIS do QZ (todos os padrões) e recusa opção perigosa', function () use ($order, $key, $pid, $u, $realOpts, $qzMsg) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations'); Db::exec('DELETE FROM print_sign_log');
+    $a = PrintStation::create('Real', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['Epson-USB']], $u);
+    PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Epson-USB', 'mode' => 'escpos', 'paper' => 80]], $u); PrintStation::control($a, 'arm', $u);
+    Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]), 'qty' => 1]]), $key());
+    $j = PrintStation::claim($a); PrintStation::markSending($a, $j['uuid']); $st = PrintStation::get($a);
+    $d = [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => $j['payload']]];
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('Epson-USB', $d, $realOpts(['forceRaw' => true]))), 403);        // pular o driver: recusado
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('Epson-USB', $d, $realOpts(['spool' => ['size' => 1]]))), 403);
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('Epson-USB', $d, $realOpts(['copies' => 9]))), 403);
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('Epson-USB', $d, $realOpts(['inventada' => 1]))), 403);
+    eq(QzSigner::sign($st, $u, $qzMsg('Epson-USB', $d, $realOpts()))['signature'] !== '', true);
+});
+t('modo HTML (impressora comum): página escapada, opções esperadas, assinatura só para pixel/html com o mesmo conteúdo', function () use ($order, $key, $pid, $u, $realOpts, $qzMsg) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    $a = PrintStation::create('Casa', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['EPSON L3150']], $u);
+    $cfg = ['printer' => 'EPSON L3150', 'mode' => 'html', 'paper' => 210, 'cut' => 1, 'copies' => 2, 'manufacturer' => 'Epson', 'model' => 'L3150 (doméstica)'];
+    PrintStation::saveMap($a, ['cozinha' => $cfg, 'copa' => $cfg, 'balcao' => $cfg], $u); PrintStation::control($a, 'arm', $u);
+    $m = PrintStation::map($a); eq((int)$m['cozinha']['cut'], 0); eq((int)$m['cozinha']['paper'], 210); eq(count($m), 3);   // mesma fila nos 3 destinos; corte ignorado em HTML
+    Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]), 'qty' => 1]], ['name' => '<script>alert(1)</script>']), $key());
+    $j = PrintStation::claim($a); eq($j['mode'], 'html'); eq($j['options'], ['units' => 'mm', 'margins' => 3, 'copies' => 2, 'scaleContent' => true]);
+    if (str_contains($j['payload'], '<script>') || !str_contains($j['payload'], 'Calabresa')) throw new Exception('html não escapado ou incompleto');
+    PrintStation::markSending($a, $j['uuid']); $st = PrintStation::get($a);
+    $d = [['type' => 'pixel', 'format' => 'html', 'flavor' => 'plain', 'data' => $j['payload']]];
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('EPSON L3150', [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => base64_encode($j['payload'])]], $realOpts($j['options']))), 403);
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('EPSON L3150', [['type' => 'pixel', 'format' => 'html', 'flavor' => 'plain', 'data' => $j['payload'] . '<p>x</p>']], $realOpts($j['options']))), 403);
+    throws(fn() => QzSigner::sign($st, $u, $qzMsg('EPSON L3150', $d, $realOpts(['units' => 'mm', 'margins' => 3, 'copies' => 50, 'scaleContent' => true]))), 403);
+    eq(QzSigner::sign($st, $u, $qzMsg('EPSON L3150', $d, $realOpts($j['options'])))['signature'] !== '', true);
+});
+t('estação parada só imprime TESTE; armar libera pedidos; pausa bloqueia; pendentes antigos podem ser descartados', function () use ($order, $key, $pid, $u) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    $a = PrintStation::create('Parada', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['Q1']], $u);
+    PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Q1', 'copies' => 2]], $u);
+    $sz = (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]);
+    foreach ([1, 2] as $_) Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sz, 'qty' => 1]]), $key());
+    eq(PrintStation::claim($a), null);                                            // não armada: pedidos não saem
+    Printing::enqueueTest('cozinha', $u); $t = PrintStation::claim($a); eq($t['kind'], 'test');   // teste autorizado pelo clique
+    Db::exec("UPDATE print_jobs SET status = 'printed' WHERE kind = 'test'");
+    Db::exec("UPDATE print_jobs SET created_at = '2000-01-01 00:00:00' WHERE id = (SELECT MIN(id) FROM print_jobs)");
+    $pv = PrintStation::armPreview($a); eq($pv['pending'], 2); eq($pv['old'], 1); eq($pv['pages'], 4);   // 2 pedidos × 2 vias
+    $r = PrintStation::control($a, 'arm', $u, true); eq($r['dropped'], 1);
+    PrintStation::control($a, 'pause', $u); eq(PrintStation::claim($a), null); PrintStation::control($a, 'resume', $u);
+    if (!PrintStation::claim($a)) throw new Exception('armada e ativa deveria entregar');
+    PrintStation::control($a, 'disarm', $u); eq((int)PrintStation::get($a)['armed'], 0);
+    throws(fn() => PrintStation::control($a, 'inventada', $u), 422);
+});
+t('cadastro de impressoras: vias repetem o ESC/POS, margem, validações, identificador único e abas', function () use ($u) {
+    Db::exec('DELETE FROM print_stations');
+    $a = PrintStation::create('Loja 1', $u, 'Loja Principal'); eq(PrintStation::get($a)['code'], 'loja-principal');
+    throws(fn() => PrintStation::create('Outra', $u, 'loja-principal'), 422);
+    eq(PrintStation::get(PrintStation::create('X', $u, 'x y z!'))['code'], 'x-y-z');   // identificador é normalizado
+    PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['TM-T20'], 'tab' => 'aaa111'], $u); $h = PrintStation::heartbeat($a, ['qz' => true, 'tab' => 'bbb222'], $u); eq($h['tabs'], 2);
+    PrintStation::saveMap($a, ['balcao' => ['printer' => 'TM-T20', 'paper' => 210, 'mode' => 'escpos', 'copies' => 9, 'margin' => 99, 'cols' => 5]], $u);
+    $m = PrintStation::map($a)['balcao']; eq((int)$m['paper'], 80); eq((int)$m['copies'], 5); eq((int)$m['margin'], 10); eq((int)$m['cols'], 48);   // A4 só em HTML; limites; colunas padrão
+    $b = PrintFormatter::escpos([['t' => 'x']], ['copies' => 3, 'margin' => 2, 'cut' => true]);
+    eq(substr_count($b, "\x1B@"), 3); eq(substr_count($b, "\x1DV"), 3); if (!str_contains($b, '  x')) throw new Exception('margem ausente');
+    throws(fn() => PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Fila-Inexistente']], $u), 422);
+});
+t('permissão print_config: só proprietário; gerente só se autorizado explicitamente', function () {
+    if (in_array('print_config', Auth::permsOf(['role' => 'manager', 'perms' => null]), true)) throw new Exception('gerente sem autorização já configura');
+    if (!in_array('print_config', Auth::permsOf(['role' => 'manager', 'perms' => json_encode(['print', 'print_config'])]), true)) throw new Exception('autorização explícita ignorada');
+    if (in_array('print_config', Auth::permsOf(['role' => 'waiter', 'perms' => json_encode(['print_config'])]), true)) throw new Exception('garçom não pode receber');
+    if (!in_array('print_config', Auth::permsOf(['role' => 'owner', 'perms' => null]), true)) throw new Exception('proprietário sem permissão');
 });
 
 echo "Hospedagem sem disco persistente\n";

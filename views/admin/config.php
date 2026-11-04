@@ -23,6 +23,7 @@
     <?php foreach (Settings::json('payment_methods') as $k => $p): ?><div class="inline"><label class="ck"><input type="checkbox" name="pay_on[<?= e($k) ?>]" value="1" <?= $p['on'] ? 'checked' : '' ?>> Ativo</label><input name="pay_label[<?= e($k) ?>]" value="<?= e($p['label']) ?>" aria-label="Rótulo de <?= e($k) ?>"></div><?php endforeach; ?>
     <label>Instruções de PIX mostradas ao cliente (ex.: chave) — deixe em branco se não usar<textarea name="pix_instructions" rows="2" maxlength="400"><?= e($s['pix_instructions']) ?></textarea></label></section>
   <section class="panel"><h2>Setores de impressão</h2>
+    <?php if (Auth::can('print') || Auth::can('print_config')): ?><p><a class="b ghost" href="/admin/config/impressao">Impressoras e estações (QZ Tray) →</a></p><?php endif; ?>
     <?php foreach (Printing::sectors() as $k => $p): ?><div class="inline"><label class="ck w8"><input type="checkbox" name="ps_on[<?= e($k) ?>]" value="1" <?= $p['on'] ? 'checked' : '' ?>> <?= e(Printing::SECTORS[$k] ?? ucfirst($k)) ?></label>
       <label>Papel<select name="ps_paper[<?= e($k) ?>]"><option value="80" <?= $p['paper'] == 80 ? 'selected' : '' ?>>80 mm</option><option value="58" <?= $p['paper'] == 58 ? 'selected' : '' ?>>58 mm</option></select></label>
       <label class="ck"><input type="checkbox" name="ps_values[<?= e($k) ?>]" value="1" <?= $p['values'] ? 'checked' : '' ?>> Mostrar valores/endereço/pagamento</label></div><?php endforeach; ?></section>

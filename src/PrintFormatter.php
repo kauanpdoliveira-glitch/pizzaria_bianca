@@ -71,13 +71,26 @@ final class PrintFormatter
     public static function escpos(array $lines, array $profile = []): string
     {
         $cs = isset(self::ESC_T[$profile['charset'] ?? 'ascii']) ? ($profile['charset'] ?? 'ascii') : 'ascii';
-        $o = "\x1B@\x1Bt" . chr(self::ESC_T[$cs]);
+        $pad = str_repeat(' ', max(0, min(20, (int)($profile['margin'] ?? 0))));
+        $one = "\x1B@\x1Bt" . chr(self::ESC_T[$cs]);
         foreach ($lines as $l) {
-            $o .= "\x1Ba" . (!empty($l['c']) ? "\x01" : "\x00") . "\x1BE" . (!empty($l['b']) ? "\x01" : "\x00") . "\x1D!" . (!empty($l['big']) ? "\x11" : "\x00");
-            $o .= self::encode(self::clean($l['t']), $cs) . "\n";   // defesa em profundidade: limpa de novo na saída
+            $one .= "\x1Ba" . (!empty($l['c']) ? "\x01" : "\x00") . "\x1BE" . (!empty($l['b']) ? "\x01" : "\x00") . "\x1D!" . (!empty($l['big']) ? "\x11" : "\x00");
+            $one .= self::encode($pad . self::clean($l['t']), $cs) . "\n";   // defesa em profundidade: limpa de novo na saída
         }
-        $o .= "\x1D!\x00\x1BE\x00\x1Ba\x00" . str_repeat("\n", max(0, (int)($profile['feed'] ?? 3)));
-        if (($profile['cut'] ?? true)) $o .= "\x1DV\x42\x03";   // corte parcial (só se o perfil da impressora diz que há guilhotina)
-        return $o;
+        $one .= "\x1D!\x00\x1BE\x00\x1Ba\x00" . str_repeat("\n", max(0, (int)($profile['feed'] ?? 3)));
+        if (($profile['cut'] ?? true)) $one .= "\x1DV\x42\x03";   // corte parcial (só se o perfil da impressora diz que há guilhotina)
+        return str_repeat($one, max(1, min(5, (int)($profile['copies'] ?? 1))));   // vias: cada uma com init e corte próprios
+    }
+
+    /** Página HTML para impressoras comuns (sem ESC/POS). Texto sempre escapado; largura em mm (58/80) ou página A4 (210). */
+    public static function html(array $lines, array $profile = []): string
+    {
+        $paper = (int)($profile['paper'] ?? 80); $w = $paper === 210 ? '190mm' : ($paper === 58 ? '48mm' : '72mm');
+        $b = '';
+        foreach ($lines as $l) {
+            $t = htmlspecialchars(self::clean($l['t']), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $b .= '<div style="' . (!empty($l['c']) ? 'text-align:center;' : '') . (!empty($l['b']) ? 'font-weight:bold;' : '') . (!empty($l['big']) ? 'font-size:15pt;' : '') . '">' . ($t === '' ? '&nbsp;' : $t) . '</div>';
+        }
+        return '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;width:' . $w . ';font:10pt/1.25 "Courier New",monospace;color:#000}div{white-space:pre-wrap;word-break:break-word}</style></head><body>' . $b . '</body></html>';
     }
 }

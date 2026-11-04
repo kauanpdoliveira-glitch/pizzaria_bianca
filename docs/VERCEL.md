@@ -1,7 +1,21 @@
 # Ambiente de testes na Vercel — o que existe, o que falta
 
-**Estado: NÃO publicado.** A Vercel não executa PHP nativamente, o disco é efêmero e o login na Vercel só pode ser feito pelo próprio dono da conta (o navegador do Claude está deslogado). O repositório já traz o necessário do lado do código; faltam decisões e contas externas listadas abaixo.
+**Estado: NÃO publicado (bloqueio de elegibilidade abaixo).** A Vercel não executa PHP nativamente, o disco é efêmero e o login na Vercel só pode ser feito pelo próprio dono da conta (o navegador do Claude está deslogado). O repositório já traz o necessário do lado do código; faltam decisões e contas externas listadas abaixo.
 
+## Bloqueio de elegibilidade (verificado em 04/11/2026)
+A página oficial do plano **Hobby** ([vercel.com/docs/plans/hobby](https://vercel.com/docs/plans/hobby)) diz que o plano gratuito é para projetos pessoais e que, conforme as *fair use guidelines*, **restringe o uso a fins não comerciais e pessoais**. A Bianca Pizzaria é um negócio: chamar o ambiente de “teste” **não** o torna elegível por si só. Publicar nele pode violar os termos e arriscar suspensão. Eu **não** presumo que seja permitido, e não publiquei.
+
+Além disso: (a) o PHP só roda pelo runtime **da comunidade** (não oficial); (b) falta um **MySQL externo** — por exemplo o plano gratuito *Starter* do TiDB Cloud (5 GiB por instância segundo a documentação) —, cujas **condições de uso comercial não encontrei** e precisam ser lidas por você; (c) login e criação de contas só você pode fazer.
+
+### Alternativas (a decisão é sua)
+| Opção | Custo | Prós | Contras |
+|---|---|---|---|
+| **A. Teste dentro do próprio computador + túnel temporário** (o app PHP e o QZ no mesmo PC; um túnel gratuito dá ao telefone uma URL pública) | R$ 0 | Atende o teste doméstico hoje; sem hospedar; dados só no PC | Precisa de PHP no PC e de baixar uma ferramenta de túnel (peço sua autorização antes); URL some ao fechar; **não** é a Vercel |
+| **B. Vercel Pro (teste gratuito de 14 dias ou pago)** | trial ou US$ 20/usuário/mês | Uso comercial permitido; é o destino desejado | Runtime PHP não oficial; ainda precisa de MySQL externo; trial tem limites |
+| **C. Hostinger/HostMia (PHP + MySQL nativos)** | plano pago da hospedagem | Roda o app como foi feito; menor alteração | Já era a fase “depois”; custo |
+| **D. Vercel Hobby assim mesmo** | R$ 0 | — | **Contraria os termos** para negócio; não recomendo |
+
+Recomendação de menor alteração e custo para **o teste de casa**: **A**; para hospedagem de testes “de verdade” com a Vercel: **B** (começando pelo teste gratuito), sempre com MySQL externo.
 ## Arquitetura escolhida (a confirmar)
 **Tudo na Vercel com o runtime PHP da comunidade** ([vercel-community/php](https://github.com/vercel-community/php), PHP 8.3 = `vercel-php@0.7.x`) + **MySQL externo** + imagens e sessões no banco. Motivo: o site é renderizado em PHP (views); separar um "frontend na Vercel" exigiria reescrever a interface, o que não é o objetivo. A alternativa sem risco de runtime não oficial é hospedar o app PHP em Hostinger/HostMia (`docs/DEPLOY-HOSTMIA.md`) e usar a Vercel só como proxy — sem ganho real.
 

@@ -36,9 +36,9 @@ final class App
             ['GET', '#^/admin/usuarios$#', 'admUsers'], ['POST', '#^/admin/usuarios$#', 'admUsersSave'], ['GET', '#^/admin/acessos$#', 'admAccess'],
             ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'],
             // estações de impressão (QZ Tray)
-            ['GET', '#^/admin/estacoes$#', 'admStations'], ['POST', '#^/admin/estacoes$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'],
+            ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
             ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
-            ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign)$#', 'apiStation'],
+            ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign|control|arm-preview)$#', 'apiStation'],
             ['POST', '#^/admin/api/estacao/(\d+)/(sending|result)/([0-9a-f-]{36})$#', 'apiStationJob'],
         ];
         foreach ($routes as [$m, $re, $fn]) {
@@ -749,45 +749,54 @@ final class App
         redirect('/admin/impressao');
     }
 
-    // ================= estações de impressão (QZ Tray) =================
-    private static function admStations(): void
+    // ================= configurações de impressão e estações (QZ Tray) =================
+    private static function admStations(string $_ = ""): void
     {
-        self::adm('admin/stations', ['title' => 'Estações de impressão', 'ov' => PrintStation::overview(), 'activeNav' => 'print', 'canConfig' => Auth::can('settings')], 'print');
+        self::adm('admin/stations', ['title' => 'Configurações → Impressão', 'ov' => PrintStation::overview(), 'activeNav' => 'print', 'canConfig' => Auth::can('print_config')], 'print');
     }
-    private static function admStationCreate(): void
+    private static function admStationCreate(string $_ = ""): void
     {
-        $u = Auth::require('settings');
-        PrintStation::create((string)($_POST['name'] ?? ''), $u);
-        self::flash('Estação criada.'); redirect('/admin/estacoes');
+        $u = Auth::require('print_config');
+        try { PrintStation::create((string)($_POST['name'] ?? ''), $u, (string)($_POST['code'] ?? '')); self::flash('Estação criada.'); }
+        catch (HttpError $e) { self::flash($e->getMessage(), true); }
+        redirect('/admin/config/impressao');
+    }
+    private static function admStationEdit(string $id): void
+    {
+        Auth::require('print_config');
+        try { PrintStation::update((int)$id, (string)($_POST['name'] ?? ''), (string)($_POST['code'] ?? '')); self::flash('Estação atualizada.'); }
+        catch (HttpError $e) { self::flash($e->getMessage(), true); }
+        redirect('/admin/config/impressao');
     }
     private static function admStationMap(string $id): void
     {
-        $u = Auth::require('settings');
-        try { PrintStation::saveMap((int)$id, (array)($_POST['map'] ?? []), $u); self::flash('Mapeamento salvo.'); }
+        $u = Auth::require('print_config');
+        try { PrintStation::saveMap((int)$id, (array)($_POST['map'] ?? []), $u); self::flash('Configuração das impressoras salva.'); }
         catch (HttpError $e) { self::flash($e->getMessage(), true); }
-        redirect('/admin/estacoes');
+        redirect('/admin/config/impressao');
     }
     private static function admStationActive(string $id): void
     {
-        Auth::require('settings');
-        PrintStation::setActive((int)$id, !empty($_POST['on']));
-        redirect('/admin/estacoes');
+        $u = Auth::require('print_config');
+        $on = !empty($_POST['on']); $act = (string)($_POST['act'] ?? '');
+        if ($act === 'pause' || $act === 'resume') PrintStation::control((int)$id, $act, $u); else PrintStation::setActive((int)$id, $on);
+        redirect('/admin/config/impressao');
     }
-    /** Comanda de TESTE (marcada "NÃO PRODUZIR"): só o proprietário pede; sai na impressora mapeada do destino. */
+    /** Comanda de TESTE (marcada "NÃO PRODUZIR"): o clique de quem tem permissão autoriza aquele teste específico. */
     private static function admStationTest(string $id): void
     {
-        $u = Auth::require('settings');
+        $u = Auth::require('print_config');
         $sector = (string)($_POST['sector'] ?? '');
-        if (!PrintStation::get((int)$id) || !isset(PrintStation::map((int)$id)[$sector])) { self::flash('Mapeie uma impressora para esse destino antes de testar.', true); redirect('/admin/estacoes'); }
+        if (!PrintStation::get((int)$id) || empty(PrintStation::map((int)$id)[$sector])) { self::flash('Salve uma impressora para esse destino antes de testar.', true); redirect('/admin/config/impressao'); }
         Printing::enqueueTest($sector, $u);
-        self::flash('Comanda de teste enfileirada para ' . (Printing::SECTORS[$sector] ?? $sector) . '. Ela sai quando uma estação ativa estiver aberta.'); redirect('/admin/estacoes');
+        self::flash('Comanda de teste enfileirada para ' . (Printing::SECTORS[$sector] ?? $sector) . ' (1 teste). Ela sai pela estação aberta; a estação não precisa estar "processando pedidos" para testes.'); redirect('/admin/config/impressao');
     }
     private static function admStationRun(string $id): void
     {
         $s = PrintStation::get((int)$id);
         if (!$s) throw new HttpError(404, 'Estação não encontrada.');
         header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; connect-src 'self' " . QzSigner::CONNECT_SRC);
-        self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print');
+        self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'map' => PrintStation::map((int)$id), 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print');
     }
     private static function apiQzCert(): void
     {
@@ -804,6 +813,8 @@ final class App
         $b = self::body();
         if ($action === 'heartbeat') json_out(PrintStation::heartbeat((int)$id, $b, $u));
         if ($action === 'claim') json_out(['job' => PrintStation::claim((int)$id)]);
+        if ($action === 'arm-preview') json_out(PrintStation::armPreview((int)$id) + ['stale_minutes' => PrintStation::STALE_JOB_MINUTES]);
+        if ($action === 'control') { $a = (string)($b['action'] ?? ''); if (!in_array($a, ['arm', 'disarm'], true)) json_out(['error' => 'Ação inválida.'], 422); json_out(PrintStation::control((int)$id, $a, $u, !empty($b['discard_old']))); }
         json_out(QzSigner::sign($s, $u, (string)($b['message'] ?? '')));
     }
     private static function apiStationJob(string $id, string $action, string $uuid): void

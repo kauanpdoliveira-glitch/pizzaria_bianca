@@ -16,14 +16,14 @@ final class Auth
 
     /** Permissões que o proprietário pode ligar/desligar por usuário (limitadas ao teto do perfil). */
     public const GRANTABLE = [
-        'manager' => ['orders', 'menu', 'customers', 'reports', 'print', 'floor', 'cashier', 'discount', 'void'],
+        'manager' => ['orders', 'menu', 'customers', 'reports', 'print', 'floor', 'cashier', 'discount', 'void', 'print_config'],
         'waiter' => ['floor', 'report_payment'],
     ];
 
     public const PERM_LABELS = [
         'orders' => 'Gestor de pedidos', 'menu' => 'Cardápio', 'customers' => 'Clientes', 'reports' => 'Vendas', 'print' => 'Impressão',
         'floor' => 'Salão (mesas e comandas)', 'cashier' => 'Caixa: conferir recebimentos e fechar contas', 'discount' => 'Aplicar descontos e remover taxa de serviço',
-        'void' => 'Cancelar pedidos já enviados', 'report_payment' => 'Informar recebimento ao caixa',
+        'void' => 'Cancelar pedidos já enviados', 'print_config' => 'Configurar impressoras e estações (só se o proprietário autorizar)', 'report_payment' => 'Informar recebimento ao caixa',
         'users' => 'Usuários e permissões', 'audit' => 'Auditoria de acessos', 'settings' => 'Configurações sensíveis', 'executive' => 'Painel executivo',
     ];
 

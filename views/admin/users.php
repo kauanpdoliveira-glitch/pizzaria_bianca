@@ -34,7 +34,7 @@ $permBoxes = function (string $role, array $on) { foreach (Auth::GRANTABLE[$role
       <label>Perfil<select name="role" id="newrole"><option value="waiter">Garçom</option><option value="manager">Gerente</option></select></label></div>
     <fieldset class="perms"><legend>Permissões iniciais</legend>
       <p class="muted small">Garçom: <?= e(implode(' · ', array_map(fn($p) => Auth::PERM_LABELS[$p], Auth::ROLE_DEFAULTS['waiter']))) ?>. Gerente: todas as marcadas abaixo. Ajuste depois, se precisar.</p>
-      <?php foreach (Auth::GRANTABLE['manager'] as $p): ?><label class="ck"><input type="checkbox" name="perms[<?= e($p) ?>]" value="1" checked> <?= e(Auth::PERM_LABELS[$p]) ?></label><?php endforeach; ?>
+      <?php foreach (Auth::GRANTABLE['manager'] as $p): ?><label class="ck"><input type="checkbox" name="perms[<?= e($p) ?>]" value="1" <?= $p === 'print_config' ? '' : 'checked' ?>> <?= e(Auth::PERM_LABELS[$p]) ?></label><?php endforeach; ?>
     </fieldset>
     <button class="b">Cadastrar</button>
     <p class="muted small">Não existe cadastro público nem criação de outro proprietário por esta tela. Para garçom, só valem "Salão" e "Informar recebimento"; o servidor descarta o resto.</p>

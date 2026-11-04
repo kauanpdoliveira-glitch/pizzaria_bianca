@@ -85,6 +85,21 @@ final class QzSigner
         return null;
     }
 
+    /** Padrões de qz.configs (qz-tray.js 2.3.0, _qz.printing.defaultConfig) + nomes antigos que a biblioteca pode acrescentar por compatibilidade. */
+    private const QZ_DEFAULTS = ['bounds' => null, 'colorType' => 'color', 'copies' => 1, 'density' => 0, 'duplex' => false, 'fallbackDensity' => null, 'interpolation' => 'bicubic', 'jobName' => null, 'legacy' => false,
+        'margins' => 0, 'orientation' => null, 'paperThickness' => null, 'printerTray' => null, 'rasterize' => false, 'rotation' => 0, 'scaleContent' => true, 'size' => null, 'units' => 'in', 'forceRaw' => false, 'altPrinting' => false, 'encoding' => null, 'spool' => null];
+
+    /** As opções reais do QZ trazem todos os padrões; aceita-se cada chave só se for o padrão ou o valor que o servidor definiu para esta impressora. */
+    private static function checkOptions(array $given, array $expect): void
+    {
+        $want = $expect + self::QZ_DEFAULTS;
+        foreach ($given as $k => $v) {
+            if (!array_key_exists($k, $want)) self::deny('opção de impressão desconhecida (' . mb_substr((string)$k, 0, 30) . ')');
+            $w = $want[$k];
+            if (is_array($v) || is_array($w) ? $v !== $w : ($v !== $w && !(is_numeric($v) && is_numeric($w) && (float)$v === (float)$w))) self::deny('opção de impressão fora do esperado (' . $k . ')');
+        }
+    }
+
     /** Valida o envio: trabalho "sending" desta estação, impressora mapeada e bytes idênticos aos reservados. */
     private static function checkPrint(array $station, array $p): int
     {
@@ -96,13 +111,14 @@ final class QzSigner
         if (!$m) self::deny('destino sem impressora mapeada');
         $name = is_array($p['printer'] ?? null) ? ($p['printer']['name'] ?? null) : ($p['printer'] ?? null);
         if (!is_string($name) || !hash_equals($m['printer_name'], $name)) self::deny('impressora diferente da mapeada');
-        $opts = array_filter((array)($p['options'] ?? []), fn($v) => $v !== null && $v !== '' && $v !== []);
-        if (array_diff(array_keys($opts), ['copies', 'jobName']) || (isset($opts['copies']) && (int)$opts['copies'] !== 1)) self::deny('opções de impressão');
+        self::checkOptions((array)($p['options'] ?? []), PrintStation::qzOptions($m));
         $d = $p['data'] ?? null;
         if (!is_array($d) || count($d) !== 1 || !is_array($d[0] ?? null)) self::deny('dados de impressão');
         $d = $d[0];
-        if (array_diff(array_keys($d), ['type', 'format', 'flavor', 'data', 'options']) || ($d['type'] ?? '') !== 'raw' || ($d['format'] ?? '') !== 'command' || ($d['flavor'] ?? '') !== 'base64' || array_filter((array)($d['options'] ?? []), fn($v) => $v !== null && $v !== '' && $v !== [])) self::deny('formato dos dados');
-        $bytes = is_string($d['data'] ?? null) ? base64_decode($d['data'], true) : false;
+        $html = ($m['mode'] ?? 'escpos') === 'html';
+        $type = $html ? ['pixel', 'html', 'plain'] : ['raw', 'command', 'base64'];
+        if (array_diff(array_keys($d), ['type', 'format', 'flavor', 'data', 'options']) || ($d['type'] ?? '') !== $type[0] || ($d['format'] ?? '') !== $type[1] || ($d['flavor'] ?? '') !== $type[2] || array_filter((array)($d['options'] ?? []), fn($v) => $v !== null && $v !== '' && $v !== [])) self::deny('formato dos dados');
+        $bytes = !is_string($d['data'] ?? null) ? false : ($html ? $d['data'] : base64_decode($d['data'], true));
         if ($bytes === false || !$j['payload_hash'] || !hash_equals($j['payload_hash'], hash('sha256', $bytes))) self::deny('conteúdo diferente do reservado');
         return (int)$j['id'];
     }

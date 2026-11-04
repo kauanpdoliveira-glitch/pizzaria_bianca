@@ -134,9 +134,11 @@ final class Printing
     /** Conteúdo do trabalho: linhas (texto) e bytes ESC/POS para o perfil. Salvo no job só o hash. */
     public static function build(array $job, ?array $profile = null): array
     {
-        $profile = ($profile ?? []) + ['cols' => (int)($job['paper'] ?? 80) === 58 ? 32 : 48, 'charset' => 'ascii', 'cut' => true];
-        $lines = $job['order_id'] ? self::lines((array)Orders::get((int)$job['order_id']), $job, $profile) : self::testLines($job, $profile);
-        return ['lines' => $lines, 'bytes' => PrintFormatter::escpos($lines, $profile)];
+        $profile = ($profile ?? []) + ['cols' => (int)($job['paper'] ?? 80) === 58 ? 32 : 48, 'charset' => 'ascii', 'cut' => true, 'mode' => 'escpos', 'margin' => 0, 'copies' => 1, 'paper' => (int)($job['paper'] ?? 80)];
+        $wrap = ['cols' => max(20, (int)$profile['cols'] - (int)$profile['margin'])] + $profile;   // largura útil = colunas − margem
+        $lines = $job['order_id'] ? self::lines((array)Orders::get((int)$job['order_id']), $job, $wrap) : self::testLines($job, $wrap);
+        if ($profile['mode'] === 'html') return ['lines' => $lines, 'bytes' => PrintFormatter::html($lines, $profile), 'mode' => 'html'];
+        return ['lines' => $lines, 'bytes' => PrintFormatter::escpos($lines, $profile), 'mode' => 'escpos'];
     }
 
     /** Ambiente de testes (APP_ENV=staging): nenhuma impressão física sai, a menos que PRINT_ENABLED=1 seja definido de propósito. */
@@ -205,7 +207,7 @@ final class Printing
         $p = [];
         foreach (Db::all("SELECT id, order_id, last_error FROM print_jobs WHERE status = 'unrouted' ORDER BY id DESC LIMIT 20") as $j) $p[] = ['tipo' => 'sem_destino', 'job' => (int)$j['id'], 'pedido' => (int)$j['order_id'], 'msg' => $j['last_error']];
         foreach (Db::all("SELECT sector, COUNT(*) n FROM print_jobs WHERE status = 'queued' AND sector <> 'sem_destino' GROUP BY sector") as $r) {
-            if (!Db::val('SELECT 1 FROM print_station_map m JOIN print_stations s ON s.id = m.station_id WHERE s.active = 1 AND m.sector = ?', [$r['sector']])) $p[] = ['tipo' => 'sem_impressora', 'setor' => $r['sector'], 'n' => (int)$r['n'], 'msg' => 'Há ' . $r['n'] . ' trabalho(s) para ' . (self::SECTORS[$r['sector']] ?? $r['sector']) . ' e nenhuma impressora mapeada em estação ativa.'];
+            if (!Db::val('SELECT 1 FROM print_station_map m JOIN print_stations s ON s.id = m.station_id WHERE s.active = 1 AND m.active = 1 AND m.sector = ?', [$r['sector']])) $p[] = ['tipo' => 'sem_impressora', 'setor' => $r['sector'], 'n' => (int)$r['n'], 'msg' => 'Há ' . $r['n'] . ' trabalho(s) para ' . (self::SECTORS[$r['sector']] ?? $r['sector']) . ' e nenhuma impressora mapeada em estação ativa.'];
         }
         return $p;
     }
@@ -285,8 +287,8 @@ final class Printing
         $add(self::title($job), ['c' => true, 'b' => true]);
         $add('TESTE - NAO PRODUZIR', ['c' => true, 'b' => true, 'big' => true]);
         $add(str_repeat('-', $w));
-        $add('Destino: ' . (self::SECTORS[$job['sector']] ?? $job['sector']));
-        $add('Colunas: ' . $w . '  Charset: ' . $profile['charset']);
+        $add('Destino: ' . (self::SECTORS[$job['sector']] ?? $job['sector']) . ' | Vias esperadas: ' . max(1, (int)($profile['copies'] ?? 1)));
+        $add('Modo: ' . ($profile['mode'] ?? 'escpos') . ' | Colunas: ' . $w . ' | Charset: ' . $profile['charset']);
         $add('Acentos: á é í ó ú ã õ â ê ô à ç Ç ½ – “aspas”');
         $add('Negrito + normal:', ['b' => true]);
         $add('1x PIZZA GRANDE (½ Calabresa + ½ Portuguesa)', ['b' => true]);

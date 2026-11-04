@@ -71,14 +71,16 @@ $ch = curl_init($B . '/api/orders'); curl_setopt_array($ch, [CURLOPT_RETURNTRANS
 $ord = json_decode((string)curl_exec($ch), true); curl_close($ch);
 chk('pedido público criado', !empty($ord['id']), json_encode($ord));
 $secs = array_column(Db::all('SELECT sector FROM print_jobs WHERE order_id = ? ORDER BY sector', [$ord['id'] ?? 0]), 'sector'); chk('fila: balcão, copa e cozinha', $secs === ['balcao', 'copa', 'cozinha'], json_encode($secs));
-$cl = $o->req('POST', "/admin/api/estacao/$sid/claim", [], true); $job = $cl['json']['job'] ?? null; chk('estação reserva um trabalho', $cl['code'] === 200 && $job && $job['hash'] === hash('sha256', base64_decode($job['bytes_b64'])), $cl['body']);
+chk('estação parada não recebe pedidos', (function($r){ return $r['code'] === 200 && array_key_exists('job', $r['json']) && $r['json']['job'] === null; })($o->req('POST', "/admin/api/estacao/$sid/claim", [], true)));
+$o->req('POST', "/admin/api/estacao/$sid/control", ['action' => 'arm'], true);
+$cl = $o->req('POST', "/admin/api/estacao/$sid/claim", [], true); $job = $cl['json']['job'] ?? null; chk('estação reserva um trabalho', $cl['code'] === 200 && $job && $job['hash'] === hash('sha256', base64_decode($job['payload'])), $cl['body']);
 $cert = $o->req('GET', '/admin/api/qz/certificate'); chk('certificado público disponível; chave NUNCA', $cert['code'] === 200 && str_contains($cert['body'], 'BEGIN CERTIFICATE') && !str_contains($cert['body'], 'PRIVATE'));
 $ts = (int)(microtime(true) * 1000);
-$mk = fn(string $pr, string $b64) => json_encode(['call' => 'print', 'params' => ['printer' => ['name' => $pr], 'options' => ['copies' => 1], 'data' => [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => $b64]]], 'timestamp' => (int)(microtime(true) * 1000)]);
-$good = $mk($job['printer'], $job['bytes_b64']);
+$mk = fn(string $pr, string $b64) => json_encode(['call' => 'print', 'params' => ['printer' => ['name' => $pr], 'options' => ['bounds' => null, 'colorType' => 'color', 'copies' => 1, 'density' => 0, 'duplex' => false, 'fallbackDensity' => null, 'interpolation' => 'bicubic', 'jobName' => null, 'legacy' => false, 'margins' => 0, 'orientation' => null, 'paperThickness' => null, 'printerTray' => null, 'rasterize' => false, 'rotation' => 0, 'scaleContent' => true, 'size' => null, 'units' => 'in', 'forceRaw' => false, 'encoding' => null, 'spool' => null], 'data' => [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => $b64]]], 'timestamp' => (int)(microtime(true) * 1000)]);
+$good = $mk($job['printer'], $job['payload']);
 chk('antes do "enviando" a assinatura de print é recusada', $o->req('POST', "/admin/api/estacao/$sid/sign", ['message' => $good], true)['code'] === 403);
 chk('"enviando" confirma a reserva', $o->req('POST', "/admin/api/estacao/$sid/sending/{$job['uuid']}", [], true)['code'] === 200);
-$good = $mk($job['printer'], $job['bytes_b64']);
+$good = $mk($job['printer'], $job['payload']);
 $sg = $o->req('POST', "/admin/api/estacao/$sid/sign", ['message' => $good], true); chk('assina o envio validado', $sg['code'] === 200 && !empty($sg['json']['signature']), $sg['body']);
 $x = openssl_x509_read($cert['body']); chk('assinatura confere com o certificado público', openssl_verify(hash('sha256', $good), base64_decode((string)($sg['json']['signature'] ?? '')), $x, OPENSSL_ALGO_SHA512) === 1);
 chk('repetição recusada (409)', $o->req('POST', "/admin/api/estacao/$sid/sign", ['message' => $good], true)['code'] === 409);
@@ -87,4 +89,10 @@ chk('chamada arbitrária recusada', $o->req('POST', "/admin/api/estacao/$sid/sig
 $rs = $o->req('POST', "/admin/api/estacao/$sid/result/{$job['uuid']}", ['ok' => true, 'sent' => true], true); chk('resultado: enviado ao subsistema', ($rs['json']['status'] ?? '') === 'printed', $rs['body']);
 chk('páginas não expõem chave privada', !str_contains($st['body'], 'PRIVATE KEY') && $anon->req('GET', '/storage/qz/private-key.pem')['code'] === 404 && $anon->req('GET', '/storage/qz/digital-certificate.txt')['code'] === 404);
 chk('log de assinaturas guarda só digest/estação/usuário', (int)Db::val('SELECT COUNT(*) FROM print_sign_log WHERE ok = 1') >= 1 && !Db::val("SELECT 1 FROM print_sign_log WHERE reason LIKE '%PRIVATE%'"));
+// autorização explícita do proprietário: gerente passa a configurar (sessão é renovada pelo session_version)
+$pdo = new PDO('sqlite:' . $path); $pdo->exec("UPDATE users SET perms = '[\"orders\",\"print\",\"print_config\"]', session_version = session_version + 1 WHERE email = 'gerente@teste.local'");
+$m2 = new C('m2'); $m2->login('gerente@teste.local', $pw['mgr']); $m2->req('GET', '/admin/config/impressao');
+chk('gerente autorizado abre Configurações → Impressão', $m2->req('GET', '/admin/config/impressao')['code'] === 200);
+chk('gerente autorizado cria estação', $m2->req('POST', '/admin/config/impressao', ['name' => 'Do gerente', 'code' => 'do-gerente'])['code'] === 302 && (int)Db::val("SELECT COUNT(*) FROM print_stations WHERE code = 'do-gerente'") === 1);
+chk('gerente antigo (sem autorização) continua barrado', $m->req('POST', '/admin/config/impressao', ['name' => 'Outra'])['code'] === 403 || $m->req('POST', '/admin/config/impressao', ['name' => 'Outra'])['code'] === 302);
 echo "\nResultado: $pass passou, $fail falhou\n"; exit($fail ? 1 : 0);
