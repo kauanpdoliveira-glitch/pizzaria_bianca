@@ -19,8 +19,8 @@ final class Mailer
         try {
             if ($driver === 'mail') return @mail($to, $subj, $body, $headers);
             if ($driver === 'smtp') return self::smtp($to, $from, $subj, $body, $headers);
-            $dir = APP_ROOT . '/storage/mail'; if (!is_dir($dir)) @mkdir($dir, 0775, true);
-            return file_put_contents($dir . '/' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.eml', "To: $to\r\nSubject: $subject\r\n$headers\r\n\r\n$body") !== false;
+            $dir = env('MAIL_LOG_DIR') ?: APP_ROOT . '/storage/mail'; if (!is_dir($dir)) @mkdir($dir, 0775, true);
+            return file_put_contents($dir . '/' . date('Ymd-His') . '-' . sprintf('%06d', (int)(fmod(microtime(true), 1) * 1000000)) . '-' . bin2hex(random_bytes(3)) . '.eml', "To: $to\r\nSubject: $subject\r\n$headers\r\n\r\n$body") !== false;
         } catch (Throwable $e) { app_log('MAIL falhou: ' . $e->getMessage()); return false; }
     }
 

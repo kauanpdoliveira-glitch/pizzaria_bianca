@@ -20,6 +20,7 @@ function throws(callable $f, int $status): void
     throw new Exception('esperava HttpError ' . $status);
 }
 
+$_ENV['MAIL_LOG_DIR'] = sys_get_temp_dir() . '/bianca-mail-suite-' . bin2hex(random_bytes(3)); @mkdir($_ENV['MAIL_LOG_DIR'], 0775, true);   // e-mails dos testes nunca vão para storage/mail
 Db::migrate();
 require __DIR__ . '/../database/seed_menu.php';
 Db::exec("INSERT INTO delivery_zones (name, fee_cents, min_order_cents, active) VALUES ('Centro', 800, 3000, 1), ('Inativo', 0, 0, 0)");
@@ -550,7 +551,7 @@ t('ingredientes do PDF cadastrados sem duplicar ao reexecutar', function () {
 echo "Recuperação de senha\n";
 t('recuperação: e-mail inexistente/inativo não gera link; ativo gera e envia; nada é revelado', function () use ($mgr) {
     $_ENV['APP_URL'] = 'https://exemplo.test'; $_ENV['MAIL_DRIVER'] = 'log';
-    $mailDir = APP_ROOT . '/storage/mail'; $before = is_dir($mailDir) ? count(glob("$mailDir/*.eml")) : 0;
+    $mailDir = $_ENV['MAIL_LOG_DIR']; $before = is_dir($mailDir) ? count(glob("$mailDir/*.eml")) : 0;
     PasswordReset::request('naoexiste@x.com', '1.1.1.1');
     eq((int)Db::val('SELECT COUNT(*) FROM password_resets'), 0);
     Db::exec('UPDATE users SET active = 0 WHERE id = ?', [$mgr['id']]); PasswordReset::request($mgr['email'], '1.1.1.2');
@@ -574,10 +575,10 @@ t('redefinir: uso único, expira, troca só a senha (cargo/permissões intactos)
     eq(PasswordReset::valid(str_repeat('a', 64)), null); eq(PasswordReset::valid('xyz'), null);
 });
 t('redefinir: link expirado ou de conta desativada depois do pedido é recusado e não reativa', function () use ($mgr) {
-    PasswordReset::request($mgr['email'], '2.2.2.2'); $eml = file_get_contents(end(glob(APP_ROOT . '/storage/mail/*.eml'))); preg_match('/token=([a-f0-9]{64})/', $eml, $m);
+    PasswordReset::request($mgr['email'], '2.2.2.2'); $eml = file_get_contents((function() { $g = glob($_ENV['MAIL_LOG_DIR'] . '/*.eml'); sort($g); return end($g); })()); preg_match('/token=([a-f0-9]{64})/', $eml, $m);
     Db::exec("UPDATE password_resets SET expires_at = '2000-01-01 00:00:00' WHERE token_hash = ?", [hash('sha256', $m[1])]);
     throws(fn() => PasswordReset::reset($m[1], 'NovaSenha12345'), 410);
-    PasswordReset::request($mgr['email'], '2.2.2.3'); $eml = file_get_contents(end(glob(APP_ROOT . '/storage/mail/*.eml'))); preg_match('/token=([a-f0-9]{64})/', $eml, $m2);
+    PasswordReset::request($mgr['email'], '2.2.2.3'); $eml = file_get_contents((function() { $g = glob($_ENV['MAIL_LOG_DIR'] . '/*.eml'); sort($g); return end($g); })()); preg_match('/token=([a-f0-9]{64})/', $eml, $m2);
     Db::exec('UPDATE users SET active = 0 WHERE id = ?', [$mgr['id']]);
     throws(fn() => PasswordReset::reset($m2[1], 'NovaSenha12345'), 410);
     eq((int)Db::val('SELECT active FROM users WHERE id = ?', [$mgr['id']]), 0); // continua bloqueada
@@ -1060,6 +1061,92 @@ t('prévia e teste do layout: dados fictícios, 1 via, marcado; prévia/salvar n
     eq($row['kind'], 'test'); eq((int)$row['copies'], 1); eq($row['order_id'], null); eq((int)$row['layout_id'], $id); eq($row['status'], 'queued');
     $t = preg_replace('/\s+/', ' ', implode(' ', array_column(Printing::build($row, ['cols' => 48, 'mode' => 'html', 'paper' => 210])['lines'], 't'))); foreach (['TESTE — NÃO PRODUZIR', 'Guaraná 2 Litros'] as $x) if (!str_contains($t, $x)) throw new Exception("teste sem $x"); if (str_contains($t, 'Calabresa')) throw new Exception('copa com pizza no teste');
     Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_layouts');
+});
+
+echo "Convites, provisionamento e e-mail\n";
+$owner = ['id' => 1, 'name' => 'Dono', 'role' => 'owner', 'perms' => null];
+$mailDir = sys_get_temp_dir() . '/bianca-mail-test-' . bin2hex(random_bytes(3)); @mkdir($mailDir, 0775, true); $_ENV['MAIL_LOG_DIR'] = $mailDir; $latestMail = function () use ($mailDir) { $f = glob($mailDir . '/*.eml'); usort($f, fn($a, $b) => filemtime($b) <=> filemtime($a) ?: strcmp($b, $a)); return $f ? file_get_contents($f[0]) : ''; };
+$tokenOf = function (string $eml) { preg_match('#/equipe/convite\?token=([a-f0-9]{64})#', $eml, $m); return $m[1] ?? ''; };
+t('convite: pendente e inativo; só o hash no banco; link usa APP_URL (não o Host); senha própria; uso único', function () use ($owner, $latestMail, $tokenOf) {
+    $_ENV['APP_URL'] = 'https://teste.exemplo'; $_ENV['MAIL_DRIVER'] = 'log'; $_SERVER['HTTP_HOST'] = 'evil.example';
+    $r = Team::invite(['name' => 'Ana', 'email' => 'Ana.Convite@Teste.com', 'role' => 'waiter'], $owner); eq($r['sent'], true);
+    $u = Db::one('SELECT * FROM users WHERE id = ?', [$r['id']]); eq((int)$u['active'], 0); eq($u['activated_at'], null); eq($u['email'], 'ana.convite@teste.com');
+    $eml = $latestMail(); if (!str_contains($eml, 'https://teste.exemplo/equipe/convite?token=') || str_contains($eml, 'evil.example')) throw new Exception('link sem APP_URL');
+    $tok = $tokenOf($eml); eq(strlen($tok), 64);
+    eq(Db::val('SELECT token_hash FROM user_invites WHERE user_id = ?', [$r['id']]), hash('sha256', $tok));
+    foreach (Db::all('SELECT * FROM user_invites') as $row) foreach ($row as $v) if ($v === $tok) throw new Exception('token em claro no banco');
+    foreach (Db::all('SELECT detail FROM audit_log') as $row) if (str_contains((string)$row['detail'], $tok)) throw new Exception('token na auditoria');
+    if (Auth::login('ana.convite@teste.com', 'qualquercoisa123') === null) throw new Exception('entrou sem ativar');
+    throws(fn() => Invite::accept($tok, 'curta1'), 422); throws(fn() => Invite::accept(str_repeat('a', 64), 'Senhaforte123'), 410);
+    Invite::accept($tok, 'SenhaDaAna2026'); $u = Db::one('SELECT * FROM users WHERE id = ?', [$r['id']]); eq((int)$u['active'], 1); if ($u['activated_at'] === null) throw new Exception('sem activated_at');
+    eq(Auth::login('ana.convite@teste.com', 'SenhaDaAna2026'), null); Auth::reset();
+    throws(fn() => Invite::accept($tok, 'OutraSenha2026'), 410);   // uso único
+    throws(fn() => Team::resendInvite($r['id'], $owner), 422);     // conta já ativada
+    unset($_SERVER['HTTP_HOST']);
+});
+t('convite: expira, reenvio invalida o anterior, revogação e desativação invalidam; reativar pendente é recusado', function () use ($owner, $latestMail, $tokenOf) {
+    $r = Team::invite(['name' => 'Beto', 'email' => 'beto@teste.com', 'role' => 'manager'], $owner); $t1 = $tokenOf($latestMail());
+    Db::exec('UPDATE user_invites SET expires_at = ? WHERE user_id = ?', [date('Y-m-d H:i:s', time() - 5), $r['id']]); eq(Invite::valid($t1), null);   // expirou
+    Team::resendInvite($r['id'], $owner); $t2 = $tokenOf($latestMail()); if ($t1 === $t2) throw new Exception('token repetido');
+    eq(Invite::valid($t1), null); if (!Invite::valid($t2)) throw new Exception('novo convite inválido');
+    Team::resendInvite($r['id'], $owner); $t3 = $tokenOf($latestMail()); eq(Invite::valid($t2), null);   // substituído
+    Team::revokeInvite($r['id'], $owner); eq(Invite::valid($t3), null); throws(fn() => Invite::accept($t3, 'SenhaForte2026'), 410);
+    $r2 = Team::invite(['name' => 'Caio', 'email' => 'caio@teste.com', 'role' => 'waiter'], $owner); $t4 = $tokenOf($latestMail());
+    throws(fn() => Team::setActive($r2['id'], true, $owner), 422);   // pendente não é "reativado"
+    Team::setActive($r2['id'], false, $owner); eq(Invite::valid($t4), null);   // desativar derruba o convite
+    $_ENV['APP_URL'] = ''; throws(fn() => Team::resendInvite($r2['id'], $owner), 500); $_ENV['APP_URL'] = 'https://teste.exemplo';
+});
+t('convite: só o proprietário; perfis permitidos; e-mail duplicado; nunca cria outro proprietário', function () use ($owner) {
+    $mgr = ['id' => 2, 'name' => 'Ger', 'role' => 'manager', 'perms' => null]; $w = ['id' => 3, 'name' => 'Gar', 'role' => 'waiter', 'perms' => null];
+    foreach ([$mgr, $w] as $a) throws(fn() => Team::invite(['name' => 'X', 'email' => 'x@teste.com', 'role' => 'waiter'], $a), 403);
+    throws(fn() => Team::invite(['name' => 'X', 'email' => 'x@teste.com', 'role' => 'owner'], $owner), 422);
+    throws(fn() => Team::invite(['name' => 'X', 'email' => 'beto@teste.com', 'role' => 'waiter'], $owner), 422);
+    throws(fn() => Team::invite(['name' => 'X', 'email' => 'nao-e-email', 'role' => 'waiter'], $owner), 422);
+    foreach (['resendInvite', 'revokeInvite'] as $fn) throws(fn() => Team::$fn(1, $mgr), 403);
+});
+t('perfil estação: permissão mínima, sem acesso à gestão; convite antigo não restaura permissões', function () use ($owner, $latestMail, $tokenOf) {
+    $r = Team::invite(['name' => 'PC Loja', 'email' => 'estacao@teste.com', 'role' => 'station', 'perms' => ['orders', 'users', 'settings', 'station']], $owner);
+    Invite::accept($tokenOf($latestMail()), 'EstacaoSenha2026'); $u = Db::one('SELECT * FROM users WHERE id = ?', [$r['id']]);
+    eq(Auth::permsOf($u), ['station']);   // o servidor descarta o que o perfil não permite
+    $_SESSION['uid'] = (int)$u['id']; $_SESSION['sv'] = (int)$u['session_version']; Auth::reset();
+    eq(Auth::can('station'), true); foreach (['print', 'print_config', 'orders', 'users', 'settings', 'floor', 'cashier'] as $p) if (Auth::can($p)) throw new Exception("estação com $p");
+    eq(Auth::home(), '/admin/estacao');
+    Team::setActive($r['id'], false, $owner); Auth::reset(); eq(Auth::user(), null);   // revogável: sessão cai
+    unset($_SESSION['uid'], $_SESSION['sv']); Auth::reset();
+    foreach (glob($GLOBALS['mailDir'] . '/*.eml') as $f) @unlink($f);
+});
+t('provisionamento do proprietário (CLI): pendente, sem senha, conflitos recusados, reenvio só para pendente', function () {
+    $db = sys_get_temp_dir() . '/bianca-prov-' . bin2hex(random_bytes(3)) . '.sqlite'; $mail = sys_get_temp_dir() . '/bianca-prov-mail-' . bin2hex(random_bytes(3)); @mkdir($mail, 0775, true);
+    $run = function (array $args) use ($db, $mail) {
+        $env = array_merge(getenv(), ['DB_DRIVER' => 'sqlite', 'DB_SQLITE_PATH' => $db, 'APP_URL' => 'https://teste.exemplo', 'MAIL_DRIVER' => 'log', 'MAIL_LOG_DIR' => $mail]);
+        $p = proc_open([PHP_BINARY, APP_ROOT . '/bin/provision-owner.php', ...$args], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, APP_ROOT, $env);
+        $o = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]); proc_close($p); return $o;
+    };
+    $o = $run(['fundador@teste.com', 'Fundador']); if (!str_contains($o, 'provisionada como proprietário')) throw new Exception("provisionar: $o");
+    $pdo = new PDO('sqlite:' . $db); $u = $pdo->query("SELECT * FROM users WHERE email = 'fundador@teste.com'")->fetch(PDO::FETCH_ASSOC);
+    eq($u['role'], 'owner'); eq((int)$u['active'], 0); eq($u['badge'], 'Fundador'); eq($u['activated_at'], null); if (strlen($u['password_hash']) < 30) throw new Exception('hash');
+    eq((int)$pdo->query('SELECT COUNT(*) FROM user_invites')->fetchColumn(), 1);
+    $o = $run(['fundador@teste.com', 'Fundador']); eq((int)$pdo->query("SELECT COUNT(*) FROM user_invites WHERE revoked_at IS NULL AND used_at IS NULL")->fetchColumn(), 1);   // reenvio: só 1 válido
+    if (!str_contains($o, 'pendente')) throw new Exception("reenvio: $o");
+    $pdo->exec("UPDATE users SET activated_at = '2026-01-01 00:00:00', active = 1"); $before = $pdo->query('SELECT password_hash FROM users')->fetchColumn();
+    $o = $run(['fundador@teste.com', 'Fundador']); if (!str_contains($o, 'CONFLITO')) throw new Exception("ativa não recusada: $o"); eq($pdo->query('SELECT password_hash FROM users')->fetchColumn(), $before);   // nada alterado
+    $o = $run(['outro@teste.com', 'Outro']); if (!str_contains($o, 'Já existe proprietário') || (int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() !== 1) throw new Exception("segundo dono sem flag: $o");
+    $o = $run(['outro@teste.com', 'Outro', '--additional-owner']); eq((int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'owner'")->fetchColumn(), 2);
+    foreach (glob($mail . '/*.eml') as $f) @unlink($f); $pdo = null; @unlink($db);
+});
+t('SMTP: cliente conversa com servidor falso (AUTH, MAIL FROM, RCPT TO, DATA, acentos) — não prova entrega real', function () {
+    $out = sys_get_temp_dir() . '/bianca-smtp-' . bin2hex(random_bytes(3)) . '.txt'; $port = 20000 + random_int(0, 9000);
+    $p = proc_open([PHP_BINARY, APP_ROOT . '/tests/e2e/smtp-fake.php', (string)$port, $out], [], $pipes);
+    for ($i = 0; $i < 40; $i++) { $s = @fsockopen('127.0.0.1', $port, $en, $es, 0.2); if ($s) { fclose($s); break; } usleep(100000); }
+    // a primeira conexão de teste consumiu o accept do servidor falso: sobe de novo
+    proc_terminate($p); proc_close($p); @unlink($out);
+    $p = proc_open([PHP_BINARY, APP_ROOT . '/tests/e2e/smtp-fake.php', (string)($port + 1), $out], [], $pipes); usleep(600000);
+    $_ENV['MAIL_DRIVER'] = 'smtp'; $_ENV['MAIL_HOST'] = '127.0.0.1'; $_ENV['MAIL_PORT'] = (string)($port + 1); $_ENV['MAIL_ENCRYPTION'] = 'none'; $_ENV['MAIL_USER'] = 'usuario'; $_ENV['MAIL_PASS'] = 'segredo'; $_ENV['MAIL_FROM'] = 'nao-responder@teste.exemplo';
+    $ok = Mailer::send('kauango.dev@teste.exemplo', 'Seu acesso — Bianca', "Olá, João.\nLinha .\n.ponto\n"); proc_close($p);
+    foreach (['MAIL_DRIVER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_ENCRYPTION', 'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM'] as $k) unset($_ENV[$k]);
+    $log = (string)@file_get_contents($out); @unlink($out); eq($ok, true);
+    foreach (['AUTH LOGIN', 'MAIL FROM:<nao-responder@teste.exemplo>', 'RCPT TO:<kauango.dev@teste.exemplo>', 'DATA', 'QUIT', 'Olá, João.'] as $x) if (!str_contains($log, $x)) throw new Exception("SMTP sem [$x]");
+    if (str_contains($log, 'segredo')) throw new Exception('senha em claro no diálogo');   // AUTH LOGIN usa base64
 });
 
 echo "Hospedagem sem disco persistente\n";

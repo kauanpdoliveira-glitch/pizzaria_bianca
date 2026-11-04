@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 final class Auth
 {
-    public const ROLES = ['owner' => 'Proprietário', 'manager' => 'Gerente', 'waiter' => 'Garçom'];
+    public const ROLES = ['owner' => 'Proprietário', 'manager' => 'Gerente', 'waiter' => 'Garçom', 'station' => 'Estação de impressão'];
 
     /** Recursos exclusivos do proprietário: nunca concedidos a outro perfil, nem por permissão individual. */
     public const OWNER_ONLY = ['users', 'audit', 'settings', 'executive'];
@@ -12,18 +12,20 @@ final class Auth
     public const ROLE_DEFAULTS = [
         'manager' => ['orders', 'menu', 'customers', 'reports', 'print', 'floor', 'cashier', 'discount', 'void'],
         'waiter' => ['floor', 'report_payment'],
+        'station' => ['station'],   // identidade própria e revogável da estação: só consome a fila e assina envios legítimos
     ];
 
     /** Permissões que o proprietário pode ligar/desligar por usuário (limitadas ao teto do perfil). */
     public const GRANTABLE = [
         'manager' => ['orders', 'menu', 'customers', 'reports', 'print', 'floor', 'cashier', 'discount', 'void', 'print_config'],
         'waiter' => ['floor', 'report_payment'],
+        'station' => ['station'],
     ];
 
     public const PERM_LABELS = [
         'orders' => 'Gestor de pedidos', 'menu' => 'Cardápio', 'customers' => 'Clientes', 'reports' => 'Vendas', 'print' => 'Impressão',
         'floor' => 'Salão (mesas e comandas)', 'cashier' => 'Caixa: conferir recebimentos e fechar contas', 'discount' => 'Aplicar descontos e remover taxa de serviço',
-        'void' => 'Cancelar pedidos já enviados', 'print_config' => 'Configurar impressoras e estações (só se o proprietário autorizar)', 'report_payment' => 'Informar recebimento ao caixa',
+        'void' => 'Cancelar pedidos já enviados', 'print_config' => 'Configurar impressoras e estações (só se o proprietário autorizar)', 'report_payment' => 'Informar recebimento ao caixa', 'station' => 'Estação de impressão (consumir a fila)',
         'users' => 'Usuários e permissões', 'audit' => 'Auditoria de acessos', 'settings' => 'Configurações sensíveis', 'executive' => 'Painel executivo',
     ];
 
@@ -78,6 +80,7 @@ final class Auth
         if (self::can('orders')) return '/admin';
         if (self::can('cashier')) return '/admin/caixa';
         if (self::can('floor')) return '/garcom';
+        if (self::can('station')) return '/admin/estacao';
         return '/equipe';
     }
 
@@ -96,6 +99,15 @@ final class Auth
         return $u;
     }
 
+    /** Exige login e QUALQUER uma das permissões (ex.: operador com "print" ou a conta da estação com "station"). */
+    public static function requireAny(array $perms, bool $api = false): array
+    {
+        $u = self::user();
+        if (!$u) { if ($api) json_out(['error' => 'Não autenticado'], 401); redirect('/equipe'); }
+        foreach ($perms as $p) if (self::can($p)) return $u;
+        if ($api) json_out(['error' => 'Sem permissão'], 403);
+        http_response_code(403); echo 'Sem permissão.'; exit;
+    }
     /** @return string|null mensagem de erro (genérica: não revela se o e-mail existe) */
     public static function login(string $email, string $password): ?string
     {

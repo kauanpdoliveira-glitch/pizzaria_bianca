@@ -16,7 +16,7 @@ final class App
             // agente de impressão (token Bearer)
             ['POST', '#^/api/print/claim$#', 'apiPrintClaim'], ['POST', '#^/api/print/([0-9a-f-]{36})/result$#', 'apiPrintResult'],
             // admin
-            ['GET', '#^/(equipe|admin/login)$#', 'loginPage'], ['POST', '#^/(equipe|admin/login)$#', 'loginPost'], ['POST', '#^/equipe/sair$#', 'logout'], ['GET', '#^/equipe/recuperar$#', 'forgotPage'], ['POST', '#^/equipe/recuperar$#', 'forgotPost'], ['GET', '#^/equipe/redefinir$#', 'resetPage'], ['POST', '#^/equipe/redefinir$#', 'resetPost'], ['POST', '#^/admin/logout$#', 'logout'],
+            ['GET', '#^/(equipe|admin/login)$#', 'loginPage'], ['POST', '#^/(equipe|admin/login)$#', 'loginPost'], ['POST', '#^/equipe/sair$#', 'logout'], ['GET', '#^/equipe/recuperar$#', 'forgotPage'], ['POST', '#^/equipe/recuperar$#', 'forgotPost'], ['GET', '#^/equipe/convite$#', 'invitePage'], ['POST', '#^/equipe/convite$#', 'invitePost'], ['GET', '#^/saude$#', 'health'], ['GET', '#^/admin/estacao$#', 'admStationHome'], ['GET', '#^/equipe/redefinir$#', 'resetPage'], ['POST', '#^/equipe/redefinir$#', 'resetPost'], ['POST', '#^/admin/logout$#', 'logout'],
             ['GET', '#^/admin$#', 'board'], ['GET', '#^/admin/pedidos$#', 'ordersHistory'], ['GET', '#^/admin/pedido/(\d+)$#', 'orderDetail'],
             ['GET', '#^/admin/pedido/(\d+)/comanda$#', 'comanda'],
             ['GET', '#^/admin/api/orders$#', 'admApiOrders'], ['POST', '#^/admin/api/orders$#', 'admApiCreateOrder'], ['GET', '#^/admin/api/orders/(\d+)$#', 'admApiOrder'], ['POST', '#^/admin/api/orders/(\d+)/status$#', 'admApiStatus'],
@@ -65,7 +65,7 @@ final class App
     }
     private static function adm(string $view, array $d = [], string $perm = 'orders'): void
     {
-        $u = Auth::require($perm);
+        $u = str_contains($perm, '|') ? Auth::requireAny(explode('|', $perm)) : Auth::require($perm);
         View::render($view, $d + ['user' => $u, 'csrf' => Auth::csrf(), 'activeNav' => $d['activeNav'] ?? $view,
             'agent' => Printing::agentState(), 'storeNow' => Settings::storeStatus(), 'newCount' => (int)Db::val("SELECT COUNT(*) FROM orders WHERE status = 'received'")], 'admin/layout');
     }
@@ -706,7 +706,8 @@ final class App
     }
     private static function admUsers(): void
     {
-        $users = Db::all('SELECT id, name, email, role, active, perms, last_login_at, created_at FROM users ORDER BY role, name');
+        $users = Db::all('SELECT u.id, u.name, u.email, u.role, u.active, u.perms, u.last_login_at, u.created_at, u.activated_at, u.invited_by, u.badge,
+            (SELECT COUNT(*) FROM user_invites i WHERE i.user_id = u.id AND i.used_at IS NULL AND i.revoked_at IS NULL AND i.expires_at >= ?) invite_open FROM users u ORDER BY u.role, u.name', [now()]);
         foreach ($users as &$u) $u['effective'] = Auth::permsOf($u);
         self::adm('admin/users', ['title' => 'Usuários e permissões', 'users' => $users, 'activeNav' => 'users'], 'users');
     }
@@ -715,10 +716,11 @@ final class App
         $me = Auth::require('users'); // somente o proprietário
         $act = $_POST['action'] ?? ''; $id = (int)($_POST['id'] ?? 0);
         $perms = isset($_POST['perms']) && is_array($_POST['perms']) ? array_keys($_POST['perms']) : [];
-        if ($act === 'create') Team::create(array_merge($_POST, ['perms' => $perms]), $me);
+        if ($act === 'invite') { $r = Team::invite(array_merge($_POST, ['perms' => $perms]), $me); self::flash($r['sent'] ? 'Convite enviado ao serviço de e-mail (o envio não garante a chegada à caixa de entrada).' : 'Convite criado, mas o e-mail NÃO foi enviado (veja MAIL_DRIVER). Use "Reenviar convite" depois de configurar o envio.', !$r['sent']); redirect('/admin/usuarios'); }
+        elseif ($act === 'resend') { $r = Team::resendInvite($id, $me); self::flash($r['sent'] ? 'Convite reenviado (os anteriores foram invalidados).' : 'Convite recriado, mas o e-mail NÃO foi enviado.', !$r['sent']); redirect('/admin/usuarios'); }
+        elseif ($act === 'revokeinvite') Team::revokeInvite($id, $me);
         elseif ($act === 'update') Team::update($id, ['name' => $_POST['name'] ?? '', 'role' => $_POST['role'] ?? '', 'perms' => $perms], $me);
         elseif ($act === 'toggle') { $t = Db::one('SELECT active FROM users WHERE id = ?', [$id]); Team::setActive($id, !($t && $t['active']), $me); }
-        elseif ($act === 'password') Team::setPassword($id, (string)($_POST['password'] ?? ''), $me);
         elseif ($act === 'revoke') Team::revoke($id, $me);
         else throw new HttpError(400, 'Ação inválida.');
         self::flash('Alteração registrada.');
@@ -877,23 +879,53 @@ final class App
         Printing::enqueueTest($sector, $u);
         self::flash('Comanda de teste enfileirada para ' . (Printing::SECTORS[$sector] ?? $sector) . ' (1 teste). Ela sai pela estação aberta; a estação não precisa estar "processando pedidos" para testes.'); redirect('/admin/config/impressao');
     }
+    /** Conta da estação: abre direto a primeira estação ativa. */
+    private static function admStationHome(): void
+    {
+        Auth::requireAny(['print', 'station']);
+        $s = Db::val('SELECT id FROM print_stations WHERE active = 1 ORDER BY id LIMIT 1');
+        if (!$s) throw new HttpError(404, 'Nenhuma estação ativa cadastrada. Peça ao proprietário.');
+        redirect('/admin/estacao/' . (int)$s);
+    }
+    /** Verificação de saúde SIMPLES (sem dados): para o supervisor local e monitoramento. */
+    private static function health(): void
+    {
+        try { $n = (int)Db::val('SELECT COUNT(*) FROM schema_migrations'); json_out(['ok' => true, 'db' => true, 'migrations' => $n, 'env' => env('APP_ENV', 'production'), 'time' => now()]); }
+        catch (Throwable $e) { json_out(['ok' => false, 'db' => false], 503); }
+    }
+    /** Convite: o convidado define a PRÓPRIA senha com o token do e-mail. */
+    private static function invitePage(): void
+    {
+        header('Referrer-Policy: no-referrer');
+        $t = (string)($_GET['token'] ?? ''); $inv = Invite::valid($t);
+        View::render('admin/invite', ['token' => $t, 'ok' => $inv !== null, 'who' => $inv ? ['name' => $inv['name'], 'role' => Auth::ROLES[$inv['role']] ?? ''] : null, 'error' => null, 'done' => false, 'title' => 'Ativar acesso — Bianca'], 'admin/bare');
+    }
+    private static function invitePost(): void
+    {
+        self::rate('invite', 15, 600);
+        $t = (string)($_POST['token'] ?? ''); $err = null;
+        if (($_POST['password'] ?? '') !== ($_POST['password2'] ?? '')) $err = 'As senhas não conferem.';
+        else { try { Invite::accept($t, (string)($_POST['password'] ?? '')); View::render('admin/invite', ['token' => '', 'ok' => true, 'who' => null, 'error' => null, 'done' => true, 'title' => 'Acesso ativado — Bianca'], 'admin/bare'); return; } catch (HttpError $e) { $err = $e->getMessage(); } }
+        http_response_code(422); $inv = Invite::valid($t);
+        View::render('admin/invite', ['token' => $t, 'ok' => $inv !== null, 'who' => $inv ? ['name' => $inv['name'], 'role' => Auth::ROLES[$inv['role']] ?? ''] : null, 'error' => $err, 'done' => false, 'title' => 'Ativar acesso — Bianca'], 'admin/bare');
+    }
     private static function admStationRun(string $id): void
     {
         $s = PrintStation::get((int)$id);
         if (!$s) throw new HttpError(404, 'Estação não encontrada.');
         header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; connect-src 'self' " . QzSigner::CONNECT_SRC);
-        self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'map' => PrintStation::map((int)$id), 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print');
+        self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'map' => PrintStation::map((int)$id), 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print|station');
     }
     private static function apiQzCert(): void
     {
-        Auth::require('print', true);
+        Auth::requireAny(['print', 'station'], true);
         $c = QzSigner::certificate();
         if (!QzSigner::status()['configured']) { http_response_code(404); header('Content-Type: text/plain'); echo ''; exit; }
         header('Content-Type: text/plain; charset=utf-8'); header('Cache-Control: no-store'); echo $c; exit;   // certificado é público
     }
     private static function apiStation(string $id, string $action): void
     {
-        $u = Auth::require('print', true);
+        $u = Auth::requireAny(['print', 'station'], true);
         $s = PrintStation::get((int)$id);
         if (!$s) json_out(['error' => 'Estação não encontrada.'], 404);
         $b = self::body();
@@ -905,7 +937,7 @@ final class App
     }
     private static function apiStationJob(string $id, string $action, string $uuid): void
     {
-        Auth::require('print', true);
+        Auth::requireAny(['print', 'station'], true);
         if (!PrintStation::get((int)$id)) json_out(['error' => 'Estação não encontrada.'], 404);
         if ($action === 'sending') json_out(PrintStation::markSending((int)$id, $uuid));
         $b = self::body();
