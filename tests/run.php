@@ -798,8 +798,8 @@ t('mapa de impressoras: só impressoras que a estação informou; só o propriet
 t('comanda de teste é marcada e não tem pedido', function () use ($u) {
     $id = Printing::enqueueTest('copa', $u); $j = Db::one('SELECT * FROM print_jobs WHERE id = ?', [$id]);
     eq($j['order_id'], null); eq($j['kind'], 'test');
-    $txt = implode("\n", array_column(Printing::build($j)['lines'], 't'));
-    if (!str_contains($txt, 'TESTE - NAO PRODUZIR')) throw new Exception('sem marca de teste');
+    $txt = preg_replace('/\s+/', ' ', implode("\n", array_column(Printing::build($j)['lines'], 't')));
+    foreach (['BIANCA PIZZARIA — TESTE — NÃO PRODUZIR', 'ID do teste:', 'Data/hora:', 'Pizza, balcão, observações, açúcar'] as $x) if (!str_contains($txt, $x)) throw new Exception("teste sem $x");
 });
 
 echo "Configuração flexível de impressoras\n";

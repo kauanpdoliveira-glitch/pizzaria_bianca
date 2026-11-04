@@ -299,18 +299,16 @@ final class Printing
     {
         $w = (int)$profile['cols']; $L = [];
         $add = function (string $t, array $f = []) use (&$L, $w) { foreach (PrintFormatter::wrap(PrintFormatter::clean($t), !empty($f['big']) ? intdiv($w, 2) : $w) as $p) $L[] = ['t' => $p] + $f; };
-        $add('PIZZARIA BIANCA', ['c' => true, 'b' => true]);
-        $add(self::title($job), ['c' => true, 'b' => true]);
-        $add('TESTE - NAO PRODUZIR', ['c' => true, 'b' => true, 'big' => true]);
+        $add('BIANCA PIZZARIA — TESTE — NÃO PRODUZIR', ['c' => true, 'b' => true, 'big' => true]);
         $add(str_repeat('-', $w));
+        $add('ID do teste: ' . strtoupper(substr(str_replace('-', '', (string)($job['uuid'] ?? '')), 0, 12)), ['b' => true]);
+        $add('Data/hora: ' . date('d/m/Y H:i:s'));
+        $add('Estação: ' . ($profile['station'] ?? '—'));
+        $add('Impressora: ' . ($profile['printer'] ?? '—'));
         $add('Destino: ' . (self::SECTORS[$job['sector']] ?? $job['sector']) . ' | Vias esperadas: ' . max(1, (int)($profile['copies'] ?? 1)));
         $add('Modo: ' . ($profile['mode'] ?? 'escpos') . ' | Colunas: ' . $w . ' | Charset: ' . $profile['charset']);
-        $add('Acentos: á é í ó ú ã õ â ê ô à ç Ç ½ – “aspas”');
-        $add('Negrito + normal:', ['b' => true]);
-        $add('1x PIZZA GRANDE (½ Calabresa + ½ Portuguesa)', ['b' => true]);
-        $add('  - sem cebola — ½ Portuguesa', ['b' => true]);
-        $add('Valores: R$ 1.234,56');
-        $add(date('d/m/Y H:i'));
+        $add(str_repeat('-', $w));
+        $add('Pizza, balcão, observações, açúcar', ['b' => true]);
         $add('');
         return $L;
     }

@@ -46,3 +46,6 @@ Runtime da comunidade **não é suporte oficial da Vercel**: pode mudar ou quebr
 
 ## Limites a conhecer
 Tempo/memória por função e *cold start* do runtime PHP; MySQL externo adiciona latência; imagens no banco servem para um cardápio pequeno (≤ 1200 px, JPEG), não para milhares de fotos; sem Brotli/gzip garantidos até medir na URL real (a Vercel costuma comprimir respostas de função, **a confirmar**).
+
+## Confirmado na conta (04/11/2026)
+Conta aberta no navegador: time `kauanpdoliveira-7733`, **plano Hobby ativo, sem cartão cadastrado**. Pela definição oficial de uso comercial (fair use guidelines: qualquer deployment usado para ganho financeiro de qualquer envolvido, incluindo *anunciar a venda de produto ou serviço* e *receber para criar/atualizar/hospedar o site*), um site de pizzaria que vende pelo cardápio digital exige **Pro ou Enterprise**. O Hobby **não** é uma opção elegível. Nenhum projeto foi criado nem alterado nessa conta.

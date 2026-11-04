@@ -179,7 +179,8 @@ final class PrintStation
         $map = array_filter(self::map($id), fn($m) => (int)$m['active'] === 1);
         if (!$map) return null;
         $sectors = array_keys($map); $armed = (int)$s['armed'] === 1;
-        return Db::txImmediate(function () use ($id, $map, $sectors, $armed) {
+        $stationName = (string)$s['name'];
+        return Db::txImmediate(function () use ($id, $map, $sectors, $armed, $stationName) {
             $now = now();
             $j = Db::one("SELECT * FROM print_jobs WHERE status = 'reserved' AND station_id = ? AND reserved_until >= ? ORDER BY id LIMIT 1", [$id, $now]);
             if (!$j) {
@@ -190,7 +191,7 @@ final class PrintStation
                 if ($n !== 1) return null;
             }
             $m = $map[$j['sector']];
-            $b = Printing::build($j, ['cols' => (int)$m['cols'], 'charset' => $m['charset'], 'cut' => (bool)$m['cut'], 'mode' => $m['mode'], 'margin' => (int)$m['margin'], 'copies' => (int)$m['copies'], 'paper' => (int)$m['paper']]);
+            $b = Printing::build($j, ['cols' => (int)$m['cols'], 'charset' => $m['charset'], 'cut' => (bool)$m['cut'], 'mode' => $m['mode'], 'margin' => (int)$m['margin'], 'copies' => (int)$m['copies'], 'paper' => (int)$m['paper'], 'station' => $stationName, 'printer' => $m['printer_name']]);
             $hash = hash('sha256', $b['bytes']);
             Db::exec('UPDATE print_jobs SET payload_hash = ?, reserved_until = ? WHERE id = ?', [$hash, date('Y-m-d H:i:s', time() + Printing::RESERVE_SECONDS), $j['id']]);
             return ['uuid' => $j['uuid'], 'sector' => $j['sector'], 'kind' => $j['kind'], 'printer' => $m['printer_name'], 'hash' => $hash, 'mode' => $b['mode'],
