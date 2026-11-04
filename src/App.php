@@ -12,7 +12,7 @@ final class App
             ['GET', '#^/$#', 'home'], ['GET', '#^/historia$#', 'historyPage'], ['GET', '#^/cardapio$#', 'menuPage'], ['GET', '#^/checkout$#', 'checkoutPage'],
             ['GET', '#^/pedido/([a-f0-9]{32})$#', 'trackPage'], ['GET', '#^/robots\.txt$#', 'robots'], ['GET', '#^/sitemap\.xml$#', 'sitemap'],
             ['GET', '#^/api/menu$#', 'apiMenu'], ['POST', '#^/api/quote$#', 'apiQuote'], ['POST', '#^/api/orders$#', 'apiCreateOrder'],
-            ['GET', '#^/api/pedido/([a-f0-9]{32})$#', 'apiTrack'],
+            ['GET', '#^/api/pedido/([a-f0-9]{32})$#', 'apiTrack'], ['GET', '#^/uploads/([a-f0-9]{16}\.jpg)$#', 'uploadServe'],
             // agente de impressão (token Bearer)
             ['POST', '#^/api/print/claim$#', 'apiPrintClaim'], ['POST', '#^/api/print/([0-9a-f-]{36})/result$#', 'apiPrintResult'],
             // admin
@@ -35,6 +35,11 @@ final class App
             ['GET', '#^/admin/config$#', 'admConfig'], ['POST', '#^/admin/config$#', 'admConfigSave'],
             ['GET', '#^/admin/usuarios$#', 'admUsers'], ['POST', '#^/admin/usuarios$#', 'admUsersSave'], ['GET', '#^/admin/acessos$#', 'admAccess'],
             ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'],
+            // estações de impressão (QZ Tray)
+            ['GET', '#^/admin/estacoes$#', 'admStations'], ['POST', '#^/admin/estacoes$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'],
+            ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
+            ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign)$#', 'apiStation'],
+            ['POST', '#^/admin/api/estacao/(\d+)/(sending|result)/([0-9a-f-]{36})$#', 'apiStationJob'],
         ];
         foreach ($routes as [$m, $re, $fn]) {
             if ($m === $method && preg_match($re, $path, $mm)) {
@@ -96,6 +101,7 @@ final class App
     private static function robots(): void
     {
         header('Content-Type: text/plain');
+        if (env('APP_ENV') === 'staging') { echo "User-agent: *\nDisallow: /\n"; return; }   // ambiente de testes: nada indexado
         echo "User-agent: *\nDisallow: /admin\nDisallow: /api/\nDisallow: /pedido/\nSitemap: " . url('/sitemap.xml') . "\n";
     }
     private static function sitemap(): void
@@ -488,7 +494,7 @@ final class App
         if ($parent && $id && Db::val('SELECT 1 FROM categories WHERE parent_id = ?', [$id])) throw new HttpError(422, 'Esta categoria já tem subcategorias; não pode virar subcategoria.');
         $mf = (int)($_POST['max_flavors'] ?? 0);
         $row = ['name' => mb_substr($name, 0, 120), 'parent_id' => $parent, 'active' => !empty($_POST['active']) ? 1 : 0, 'is_pizza' => !empty($_POST['is_pizza']) ? 1 : 0,
-            'max_flavors' => $mf >= 1 && $mf <= 4 ? $mf : null, 'allow_removals' => !empty($_POST['allow_removals']) ? 1 : 0, 'sector' => ($_POST['sector'] ?? '') === 'balcao' ? 'balcao' : 'cozinha'];
+            'max_flavors' => $mf >= 1 && $mf <= 4 ? $mf : null, 'allow_removals' => !empty($_POST['allow_removals']) ? 1 : 0, 'sector' => ($_POST['sector'] ?? '') === 'copa' ? 'copa' : 'cozinha'];
         if ($id) Db::update('categories', $id, $row); else { $row['sort'] = 1 + (int)Db::val('SELECT COALESCE(MAX(sort),0) FROM categories'); $id = Db::insert('categories', $row); }
         Auth::audit('menu.category', "#$id $name");
         self::flash('Categoria salva.');
@@ -512,7 +518,9 @@ final class App
         $st = $_POST['status'] ?? 'active';
         $row = ['category_id' => $cat, 'name' => mb_substr($name, 0, 160), 'description' => mb_substr(trim((string)($_POST['description'] ?? '')), 0, 1000) ?: null,
             'base_price_cents' => parse_money((string)($_POST['price'] ?? '0')), 'available' => $st === 'out' ? 0 : 1, 'hidden' => $st === 'hidden' ? 1 : 0,
-            'badge' => mb_substr(trim((string)($_POST['badge'] ?? '')), 0, 80) ?: null, 'sort' => (int)($_POST['sort'] ?? 0)];
+            'badge' => mb_substr(trim((string)($_POST['badge'] ?? '')), 0, 80) ?: null, 'sort' => (int)($_POST['sort'] ?? 0),
+            'print_sector' => in_array($_POST['print_sector'] ?? '', ['cozinha', 'copa'], true) ? $_POST['print_sector'] : null];
+        Printing::forgetCache();
         if ($img = self::uploadImage('image')) $row['image'] = $img;
         if ($id === 'novo') { $row['sort'] = 1 + (int)Db::val('SELECT COALESCE(MAX(sort),0) FROM products WHERE category_id = ?', [$cat]); $pid = Db::insert('products', $row); }
         else { $pid = (int)$id; Db::update('products', $pid, $row); }
@@ -553,11 +561,16 @@ final class App
         $im = match ($mime) { 'image/jpeg' => @imagecreatefromjpeg($f['tmp_name']), 'image/png' => @imagecreatefrompng($f['tmp_name']), 'image/webp' => @imagecreatefromwebp($f['tmp_name']), default => false };
         if (!$im) throw new HttpError(422, 'Use imagem JPG, PNG ou WebP.');
         if (imagesx($im) > 1200) $im = imagescale($im, 1200, -1);
-        $dir = APP_ROOT . '/public/uploads';
-        if (!is_dir($dir)) mkdir($dir, 0775, true);
-        $name = bin2hex(random_bytes(8)) . '.jpg';
-        imagejpeg($im, "$dir/$name", 82);
-        return "/uploads/$name";
+        ob_start(); imagejpeg($im, null, 82); $jpeg = (string)ob_get_clean();
+        return Uploads::put($jpeg);
+    }
+    /** Imagens enviadas guardadas no banco (UPLOAD_DRIVER=db); em modo local o servidor web serve a pasta direto. */
+    private static function uploadServe(string $name): void
+    {
+        $f = Uploads::get($name);
+        if (!$f) throw new HttpError(404, 'Imagem não encontrada.');
+        header('Content-Type: ' . $f['mime']); header('X-Content-Type-Options: nosniff'); header('Cache-Control: public, max-age=31536000, immutable'); header('Content-Length: ' . strlen($f['data']));
+        echo $f['data'];
     }
     private static function admGroupsForm(string $catId): void
     {
@@ -679,7 +692,7 @@ final class App
         $pm = Settings::json('payment_methods');
         foreach ($pm as $k => &$m) { $m['on'] = !empty($in['pay_on'][$k]) ? 1 : 0; if (!empty($in['pay_label'][$k])) $m['label'] = mb_substr(trim($in['pay_label'][$k]), 0, 80); }
         Settings::set('payment_methods', json_encode($pm, JSON_UNESCAPED_UNICODE));
-        $ps = Settings::json('print_sectors');
+        $ps = Printing::sectors();
         foreach ($ps as $k => &$s) { $s['on'] = !empty($in['ps_on'][$k]) ? 1 : 0; $s['paper'] = ($in['ps_paper'][$k] ?? '80') === '58' ? 58 : 80; $s['values'] = !empty($in['ps_values'][$k]) ? 1 : 0; }
         Settings::set('print_sectors', json_encode($ps));
         // bairros/zonas de entrega
@@ -734,5 +747,71 @@ final class App
         $_SESSION['new_token'] = Printing::newAgentToken();
         Auth::audit('print.token');
         redirect('/admin/impressao');
+    }
+
+    // ================= estações de impressão (QZ Tray) =================
+    private static function admStations(): void
+    {
+        self::adm('admin/stations', ['title' => 'Estações de impressão', 'ov' => PrintStation::overview(), 'activeNav' => 'print', 'canConfig' => Auth::can('settings')], 'print');
+    }
+    private static function admStationCreate(): void
+    {
+        $u = Auth::require('settings');
+        PrintStation::create((string)($_POST['name'] ?? ''), $u);
+        self::flash('Estação criada.'); redirect('/admin/estacoes');
+    }
+    private static function admStationMap(string $id): void
+    {
+        $u = Auth::require('settings');
+        try { PrintStation::saveMap((int)$id, (array)($_POST['map'] ?? []), $u); self::flash('Mapeamento salvo.'); }
+        catch (HttpError $e) { self::flash($e->getMessage(), true); }
+        redirect('/admin/estacoes');
+    }
+    private static function admStationActive(string $id): void
+    {
+        Auth::require('settings');
+        PrintStation::setActive((int)$id, !empty($_POST['on']));
+        redirect('/admin/estacoes');
+    }
+    /** Comanda de TESTE (marcada "NÃO PRODUZIR"): só o proprietário pede; sai na impressora mapeada do destino. */
+    private static function admStationTest(string $id): void
+    {
+        $u = Auth::require('settings');
+        $sector = (string)($_POST['sector'] ?? '');
+        if (!PrintStation::get((int)$id) || !isset(PrintStation::map((int)$id)[$sector])) { self::flash('Mapeie uma impressora para esse destino antes de testar.', true); redirect('/admin/estacoes'); }
+        Printing::enqueueTest($sector, $u);
+        self::flash('Comanda de teste enfileirada para ' . (Printing::SECTORS[$sector] ?? $sector) . '. Ela sai quando uma estação ativa estiver aberta.'); redirect('/admin/estacoes');
+    }
+    private static function admStationRun(string $id): void
+    {
+        $s = PrintStation::get((int)$id);
+        if (!$s) throw new HttpError(404, 'Estação não encontrada.');
+        header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; connect-src 'self' " . QzSigner::CONNECT_SRC);
+        self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print');
+    }
+    private static function apiQzCert(): void
+    {
+        Auth::require('print', true);
+        $c = QzSigner::certificate();
+        if (!QzSigner::status()['configured']) { http_response_code(404); header('Content-Type: text/plain'); echo ''; exit; }
+        header('Content-Type: text/plain; charset=utf-8'); header('Cache-Control: no-store'); echo $c; exit;   // certificado é público
+    }
+    private static function apiStation(string $id, string $action): void
+    {
+        $u = Auth::require('print', true);
+        $s = PrintStation::get((int)$id);
+        if (!$s) json_out(['error' => 'Estação não encontrada.'], 404);
+        $b = self::body();
+        if ($action === 'heartbeat') json_out(PrintStation::heartbeat((int)$id, $b, $u));
+        if ($action === 'claim') json_out(['job' => PrintStation::claim((int)$id)]);
+        json_out(QzSigner::sign($s, $u, (string)($b['message'] ?? '')));
+    }
+    private static function apiStationJob(string $id, string $action, string $uuid): void
+    {
+        Auth::require('print', true);
+        if (!PrintStation::get((int)$id)) json_out(['error' => 'Estação não encontrada.'], 404);
+        if ($action === 'sending') json_out(PrintStation::markSending((int)$id, $uuid));
+        $b = self::body();
+        json_out(PrintStation::result((int)$id, $uuid, !empty($b['ok']), !empty($b['sent']), (string)($b['error'] ?? '')));
     }
 }

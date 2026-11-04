@@ -1,0 +1,5 @@
+qz-tray.js (npm: qz-tray 2.3.0) - QZ Industries, LLC - licenca LGPL-2.1.
+Fonte oficial: https://github.com/qzind/tray  |  https://www.npmjs.com/package/qz-tray
+Obtido do registro npm em 04/11/2026; integridade sha512 conferida com o registro:
+sha512-hviWThaaUHdjSTjs1q7D8ow8F7l1iBUhbM3J+sOL2DgkTlXO5DmxQewMdirdQgnUQAuaiSzVB9wIhiltOn1aaQ==  (tarball)
+O arquivo NAO foi modificado. Texto da LGPL-2.1: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html

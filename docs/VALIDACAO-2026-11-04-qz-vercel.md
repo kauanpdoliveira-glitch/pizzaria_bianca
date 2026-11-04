@@ -1,0 +1,40 @@
+# Validação — QZ Tray, destinos de impressão e preparo para Vercel (04/11/2026)
+
+Ponto de recuperação: tag `pre-qz-tray` (commit `5ac5f04`) e cópia `D:\Pizzaria_Bianca-recuperacao-20261104-1622`.
+
+## Classificação das pendências anteriores
+| Pendência | Classificação | Situação |
+|---|---|---|
+| gzip/Brotli não verificados em hospedagem real | **validação externa** | segue aberta; só mede-se na hospedagem/URL real |
+| Medições só locais | **validação externa** | idem |
+| MySQL não testado | **validação externa** (precisa servidor) | segue aberta; migrações 006/007 escritas para ambos os bancos, só SQLite executado |
+| Concorrência só em SQLite/mesmo PC | **validação externa** | agora há reserva atômica por estação, testada em SQLite (um trabalho nunca vai a duas estações); MySQL usa transação + `UPDATE … WHERE status='queued'` (não executado) |
+| Teclado virtual/toque/leitor de tela em aparelhos reais | **validação externa** | segue aberta |
+| Cobertura incompleta de build por telas/perfis | **defeito reproduzível → corrigido em parte** | rotas/telas novas do painel não entram no build (a tela da estação usa JS fonte, sem minificação); `build-assets --check` OK |
+| Impressão física não integrada | **configuração ausente + equipamento** | integrada por software (QZ); falta equipamento/certificado da loja |
+| Vercel: runtime/DB/uploads/sessões/env indefinidos | **configuração ausente** | runtime e abordagem definidos, sessões/uploads no banco implementados; **falta login do dono e MySQL externo** (`docs/VERCEL.md`) |
+
+## O que foi implementado (código)
+- Destinos estáveis `cozinha`/`copa`/`balcao` por produto/categoria; migração 006 (categorias legadas: `balcao`→`copa`); pendência visível "Sem destino"; sem comanda vazia.
+- Fila persistente com `job_key` único (idempotência), reserva temporária por estação, `payload_hash`, estados honestos, reimpressão/reenvio auditados, comanda de teste marcada.
+- `PrintFormatter`: ESC/POS por perfil (colunas, charset ascii/cp860/cp850/cp1252, corte), remoção de caracteres de controle (sem injeção de comandos), sem logotipo.
+- `PrintStation` + tela **Estações** (somente proprietário configura) + página da estação com `qz-tray.js` oficial 2.3.0 (cópia sem alteração, proveniência e hash em `public/assets/vendor/`), reconexão com backoff exponencial + jitter e guarda de instância única.
+- `QzSigner`: signer **validador** (chaves só no servidor), anti-replay, limite de taxa, auditoria; CSP `connect-src` apenas na página da estação.
+- Hospedagem: `SESSION_DRIVER=db`, `UPLOAD_DRIVER=db`, `APP_ENV=staging` (faixa, noindex, impressão física desligada), `vercel.json`/`api/index.php` (não validados).
+
+## Evidência (o que de fato foi executado)
+| Nível | Evidência |
+|---|---|
+| **Software (unidade)** | `php tests/run.php`: **78 aprovados, 0 falhas** (66 anteriores + 12 novos: roteamento, sem destino, sanitização ESC/POS, duas estações/reserva, ciclo e incerto, assinatura aceita/recusada, mapa e permissões, comanda de teste, sessões no banco, imagens no banco, ambiente de testes) |
+| **HTTP real local (banco temporário, porta 8097)** | `tests/e2e/qz-http.php`: **35 aprovados, 0 falhas** — login por perfil, anônimo/garçom/gerente bloqueados, gerente não cria/mapeia/desativa/testa, CSRF, CSP só na estação, pedido público → 3 trabalhos, reserva, "enviando", assinatura confere com o certificado (`openssl_verify` SHA-512), repetição/adulteração/chamada arbitrária recusadas, chave privada nunca servida. Repetido com `SESSION_DRIVER=db` (35/35) |
+| **Navegador + dublê do QZ (porta 8096)** | página da estação no navegador do app com `tests/e2e/qz-stub.js`: conectou, listou 3 impressoras, assinou via servidor, imprimiu 3 trabalhos (cozinha 326 B, copa 321 B, balcão 587 B) e marcou "Enviado ao subsistema"; com falha simulada no `print()` os 3 viraram **incertos**, 1 tentativa, **sem reenvio automático** |
+| **QZ Tray real** | **NÃO validado**: não há QZ instalado neste computador. O contrato de assinatura foi implementado a partir do código oficial do `qz-tray.js` (hash SHA-256 do JSON `{call,params,timestamp}` assinado com SHA-512), mas a aceitação pelo QZ Tray real não foi observada |
+| **Impressão física** | **NÃO validada** (nenhuma impressora usada, sem comanda de teste impressa) |
+| **Operação silenciosa** | **NÃO validada** (exige certificado confiável pelo QZ) |
+| **Vercel / MySQL** | **NÃO executados** |
+
+## Lacunas conhecidas e riscos
+- O QZ 2.3.0 vendorizado é mais novo que as docs consultadas (até 2.2): comportamento de assinatura pode diferir → validar no QZ real.
+- O charset `cp860` e os códigos de página (`ESC t n`) variam por fabricante: **testar no papel** antes de ligar.
+- Sessões/imagens no banco reduzem o desempenho em comparação a arquivo; aceitável para teste.
+- A reserva de 90 s pode expirar se o QZ demorar a abrir; o trabalho volta à fila (nada foi enviado) — comportamento testado.

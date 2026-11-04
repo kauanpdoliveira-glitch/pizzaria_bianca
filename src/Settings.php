@@ -24,7 +24,7 @@ final class Settings
         'pix_instructions' => '',
         'half_rule' => 'average',      // average | highest
         'max_flavors' => '2',
-        'print_sectors' => '{"cozinha":{"on":1,"paper":80,"values":0},"balcao":{"on":1,"paper":80,"values":1}}',
+        'print_sectors' => '{"cozinha":{"on":1,"paper":80,"values":0},"copa":{"on":1,"paper":80,"values":0},"balcao":{"on":1,"paper":80,"values":1}}',
         'print_agent_hash' => '',
         'print_agent_seen' => '',
         'print_max_attempts' => '3',

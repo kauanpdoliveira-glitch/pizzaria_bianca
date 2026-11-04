@@ -399,7 +399,7 @@ t('rodadas: só itens novos viram produção; setor correto; reenvio com a mesma
     eq((int)Db::val('SELECT COUNT(*) FROM orders WHERE tab_id = ?', [$a['tab_id']]), 2);
     eq((int)Db::val('SELECT COUNT(*) FROM order_items WHERE order_id = ?', [$r2['order_id']]), 1); // só o item novo
     eq(Db::all('SELECT sector FROM print_jobs WHERE order_id = ?', [$r1['order_id']]), [['sector' => 'cozinha']]);
-    eq(Db::all('SELECT sector FROM print_jobs WHERE order_id = ?', [$r2['order_id']]), [['sector' => 'balcao']]); // bebida: bar
+    eq(Db::all('SELECT sector FROM print_jobs WHERE order_id = ?', [$r2['order_id']]), [['sector' => 'copa']]); // bebida: copa/bar
     $o = Orders::get($r1['order_id']);
     eq($o['origin'], 'salao'); eq($o['type'], 'dine_in'); eq((int)$o['table_number'], 5); eq($o['events'][0]['user_name'], 'Garcom.a');
     $txt = implode("\n", array_column(Printing::lines($o, ['paper' => 58, 'sector' => 'cozinha', 'kind' => 'original']), 't'));
@@ -664,6 +664,168 @@ t('fotos: sem autorização ficam pendentes; com ela só entram em produto sem f
     if (IfoodImport::unlinkPhotos($ifOpt['uploads_dir']) < 10) throw new Exception('unlink');
     eq(Db::val("SELECT image FROM products WHERE name = 'Margherita'"), null);
     eq(Db::val("SELECT image FROM products WHERE name = 'Atum'"), '/uploads/manual.jpg', 'unlink apagou foto manual');
+});
+
+echo "Impressão por destino e QZ Tray\n";
+// par de chaves temporário (nunca o de desenvolvimento): chave só em arquivo temporário fora do projeto
+$qzTmp = sys_get_temp_dir() . '/bianca-qz-test-' . bin2hex(random_bytes(4)); @mkdir($qzTmp, 0700, true);
+file_put_contents("$qzTmp/c.cnf", "[req]\ndistinguished_name=dn\n[dn]\n");
+$qzCfg = ['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA, 'digest_alg' => 'sha512', 'config' => "$qzTmp/c.cnf"];
+$qzPk = openssl_pkey_new($qzCfg); $qzX = openssl_csr_sign(openssl_csr_new(['commonName' => 'teste'], $qzPk, $qzCfg), null, $qzPk, 30, $qzCfg);
+openssl_x509_export($qzX, $qzCert); openssl_pkey_export($qzPk, $qzKey, null, $qzCfg);
+file_put_contents("$qzTmp/key.pem", $qzKey); file_put_contents("$qzTmp/cert.txt", $qzCert);
+$_ENV['QZ_PRIVATE_KEY_PATH'] = "$qzTmp/key.pem"; $_ENV['QZ_CERT_PATH'] = "$qzTmp/cert.txt";
+$mix = fn() => [['product_id' => $pid('Calabresa'), 'size_id' => $sid('Calabresa', 'Média'), 'qty' => 1], ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]];
+$secOf = fn(int $oid) => array_column(Db::all('SELECT sector FROM print_jobs WHERE order_id = ? ORDER BY sector', [$oid]), 'sector');
+$mkStation = function (string $name, array $sectors) use ($u) {
+    $id = PrintStation::create($name, $u);
+    PrintStation::heartbeat($id, ['qz' => true, 'version' => '2.2.4', 'printers' => ['Cozinha-USB', 'Bar-USB', 'Balcao-LAN']], $u);
+    $rows = []; foreach ($sectors as $s => $p) $rows[$s] = ['printer' => $p, 'cols' => 48, 'charset' => 'ascii', 'cut' => 1];
+    PrintStation::saveMap($id, $rows, $u);
+    return $id;
+};
+t('roteamento: pizza → cozinha, bebida → copa, resumo → balcão; sem comanda de setor vazio', function () use ($order, $key, $mix, $secOf, $pid) {
+    Db::exec('DELETE FROM print_jobs');
+    $r = Orders::create($order($mix()), $key());
+    eq($secOf($r['id']), ['balcao', 'copa', 'cozinha']);
+    $r2 = Orders::create($order([['product_id' => $pid('Coca-Cola Lata'), 'qty' => 2]]), $key());
+    eq($secOf($r2['id']), ['balcao', 'copa']); // sem item de cozinha: nada na cozinha
+    $k = implode("\n", array_column(Printing::lines(Orders::get($r['id']), Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'cozinha'", [$r['id']])), 't'));
+    if (!str_contains($k, 'Calabresa') || str_contains($k, 'Coca')) throw new Exception('cozinha deve ter só a pizza');
+    $c = implode("\n", array_column(Printing::lines(Orders::get($r['id']), Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'copa'", [$r['id']])), 't'));
+    if (!str_contains($c, 'Coca') || str_contains($c, 'Calabresa')) throw new Exception('copa deve ter só a bebida');
+});
+t('produto/categoria sem destino vira pendência visível; sobrescrita por produto vale; reenvio idempotente', function () use ($order, $key, $pid, $secOf) {
+    Db::exec('DELETE FROM print_jobs');
+    Db::exec("UPDATE categories SET sector = NULL WHERE name = 'Bebidas'"); Printing::forgetCache();
+    $r = Orders::create($order([['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), $key());
+    eq($secOf($r['id']), ['balcao', 'sem_destino']);
+    eq(Db::val("SELECT status FROM print_jobs WHERE order_id = ? AND sector = 'sem_destino'", [$r['id']]), 'unrouted');
+    if (!str_contains(json_encode(Printing::pendencias()), 'sem_destino')) throw new Exception('pendência invisível');
+    Db::exec("UPDATE products SET print_sector = 'cozinha' WHERE name = 'Coca-Cola Lata'"); Printing::forgetCache();
+    $r = Orders::create($order([['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), $key());
+    eq($secOf($r['id']), ['balcao', 'cozinha']);
+    $n = (int)Db::val('SELECT COUNT(*) FROM print_jobs');
+    Printing::enqueueOrder($r['id'], 'original', null); eq((int)Db::val('SELECT COUNT(*) FROM print_jobs'), $n, 'duplicou pelo job_key');
+    Db::exec("UPDATE products SET print_sector = NULL WHERE name = 'Coca-Cola Lata'"); Db::exec("UPDATE categories SET sector = 'copa' WHERE name = 'Bebidas'"); Printing::forgetCache();
+});
+t('texto de clientes nunca injeta comandos ESC/POS', function () {
+    $evil = "Ze\x1B@\x1DV\x01\x1B!\x00 \u{2028}fim";
+    $c = PrintFormatter::clean($evil);
+    if (preg_match('/[\x00-\x1F\x7F]/', $c) || str_contains($c, "\u{2028}")) throw new Exception('controle passou: ' . bin2hex($c));
+    $b = PrintFormatter::escpos([['t' => $evil], ['t' => 'Pão à moda ½ “x”']], ['charset' => 'cp860', 'cut' => true]);
+    eq(substr_count($b, "\x1B@"), 1); eq(substr_count($b, "\x1DV"), 1); // só o init e o corte do formatador
+    if (!str_contains($b, "\x84")) throw new Exception('cp860 sem ã'); // ã = 0x84
+    $a = PrintFormatter::escpos([['t' => 'Pão ½']]); if (preg_match('/[\x80-\xFF]/', $a)) throw new Exception('ascii com bytes altos');
+});
+t('estação: duas estações no mesmo destino nunca pegam o mesmo trabalho; reserva expira e volta à fila', function () use ($order, $key, $pid, $mkStation) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    $a = $mkStation('Caixa', ['cozinha' => 'Cozinha-USB']); $b = $mkStation('Reserva', ['cozinha' => 'Cozinha-USB']);
+    Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => (int)Db::val("SELECT ps.id FROM product_sizes ps WHERE ps.product_id = ? LIMIT 1", [$pid('Calabresa')]), 'qty' => 1]]), $key());
+    $j1 = PrintStation::claim($a); $j2 = PrintStation::claim($b);
+    if (!$j1 || $j2) throw new Exception('mesmo trabalho entregue a duas estações');
+    eq(PrintStation::claim($a)['uuid'], $j1['uuid']); // reentrante: mesma reserva, mesmos bytes
+    Db::exec("UPDATE print_jobs SET reserved_until = '2000-01-01 00:00:00'");
+    $j3 = PrintStation::claim($b); eq($j3['uuid'], $j1['uuid']);
+    throws(fn() => PrintStation::markSending($a, $j1['uuid']), 409); // a estação antiga perdeu a reserva
+});
+t('estação: ciclo reservado → enviando → enviado; falha antes do envio volta à fila; após envio vira incerto e não é reenviado', function () use ($order, $key, $pid, $mkStation) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    $a = $mkStation('Caixa', ['cozinha' => 'Cozinha-USB']);
+    $sz = (int)Db::val("SELECT ps.id FROM product_sizes ps WHERE ps.product_id = ? LIMIT 1", [$pid('Calabresa')]);
+    foreach ([1, 2, 3] as $_) Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sz, 'qty' => 1]]), $key());
+    $j = PrintStation::claim($a); PrintStation::markSending($a, $j['uuid']);
+    eq(PrintStation::result($a, $j['uuid'], true, true, '')['status'], 'printed');
+    $j = PrintStation::claim($a); // falha antes de enviar: impressora sumiu
+    eq(PrintStation::result($a, $j['uuid'], false, false, 'Impressora não encontrada')['status'], 'queued');
+    $j2 = PrintStation::claim($a); eq($j2['uuid'], $j['uuid']); eq($j2['attempt'], 2);
+    PrintStation::markSending($a, $j2['uuid']);
+    eq(PrintStation::result($a, $j2['uuid'], false, true, 'timeout')['status'], 'uncertain');
+    $j3 = PrintStation::claim($a); // o incerto NÃO volta sozinho: o próximo é outro pedido
+    if ($j3['uuid'] === $j2['uuid']) throw new Exception('reenviou resultado incerto');
+    eq(Db::val('SELECT status FROM print_jobs WHERE uuid = ?', [$j2['uuid']]), 'uncertain');
+    // envio sem confirmação por muito tempo => incerto (nunca automático para fila)
+    PrintStation::markSending($a, $j3['uuid']); Db::exec("UPDATE print_jobs SET claimed_at = '2000-01-01 00:00:00' WHERE uuid = ?", [$j3['uuid']]); Printing::sweep();
+    eq(Db::val('SELECT status FROM print_jobs WHERE uuid = ?', [$j3['uuid']]), 'uncertain');
+    // reimpressão explícita e auditada de incerto
+    Printing::retry((int)Db::val('SELECT id FROM print_jobs WHERE uuid = ?', [$j3['uuid']]), ['id' => 1, 'name' => 'Teste']);
+    eq(Db::val('SELECT status FROM print_jobs WHERE uuid = ?', [$j3['uuid']]), 'queued');
+});
+t('assinatura QZ: só o envio reservado/validado é assinado; repetição, outra impressora, outro conteúdo e outras chamadas são recusados', function () use ($order, $key, $pid, $mkStation, $u) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations'); Db::exec('DELETE FROM print_sign_log');
+    $a = $mkStation('Caixa', ['cozinha' => 'Cozinha-USB', 'copa' => 'Bar-USB']); $st = PrintStation::get($a);
+    $sz = (int)Db::val("SELECT ps.id FROM product_sizes ps WHERE ps.product_id = ? LIMIT 1", [$pid('Calabresa')]);
+    Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sz, 'qty' => 1]]), $key());
+    $msg = fn(string $call, array $params, ?int $ts = null) => json_encode(['call' => $call, 'params' => $params, 'timestamp' => $ts ?? (int)(microtime(true) * 1000)]);
+    $pm = fn(string $printer, string $b64) => ['printer' => ['name' => $printer], 'options' => ['copies' => 1], 'data' => [['type' => 'raw', 'format' => 'command', 'flavor' => 'base64', 'data' => $b64]]];
+    $j = PrintStation::claim($a);
+    // reservado, ainda não "enviando": nada de print assinado
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['bytes_b64']))), 403);
+    PrintStation::markSending($a, $j['uuid']);
+    $good = $msg('print', $pm('Cozinha-USB', $j['bytes_b64']));
+    $r = QzSigner::sign($st, $u, $good);
+    eq(openssl_verify(hash('sha256', $good), base64_decode($r['signature']), $qzX0 = openssl_x509_read((string)QzSigner::certificate()), OPENSSL_ALGO_SHA512), 1, 'assinatura não confere com o certificado');
+    throws(fn() => QzSigner::sign($st, $u, $good), 409);                                                        // repetição
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Bar-USB', $j['bytes_b64']))), 403);               // outra impressora
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', base64_encode("\x1B@LIXO")))), 403); // outro conteúdo
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', $pm('Cozinha-USB', $j['bytes_b64']), (int)(microtime(true) * 1000) - 600000)), 403); // timestamp velho
+    throws(fn() => QzSigner::sign($st, $u, $msg('file.read', ['path' => 'C:/x'])), 403);                          // chamada fora da lista
+    throws(fn() => QzSigner::sign($st, $u, $msg('print', ['printer' => 'Cozinha-USB', 'data' => [['type' => 'pixel', 'data' => 'x']], 'extra' => 1])), 403);
+    throws(fn() => QzSigner::sign($st, $u, 'não é json'), 403);
+    eq(QzSigner::sign($st, $u, $msg('printers.find', []))['signature'] !== '', true);
+    throws(fn() => QzSigner::sign($st, $u, $msg('printers.find', ['query' => str_repeat('x', 500)])), 403);
+    $pr = $msg('print', $pm('Cozinha-USB', $j['bytes_b64']));
+    PrintStation::setActive($a, false);
+    throws(fn() => QzSigner::sign(PrintStation::get($a), $u, $pr), 403);                                        // estação desativada
+    if ((int)Db::val("SELECT COUNT(*) FROM print_sign_log WHERE ok = 0") < 5) throw new Exception('recusas não registradas');
+    eq((int)Db::val("SELECT COUNT(*) FROM print_sign_log WHERE ok = 1 AND call_name = 'print'"), 1);
+});
+t('assinatura: sem chave configurada o servidor recusa (modo manual do QZ) e nunca expõe a chave', function () use ($u, $mkStation) {
+    $old = $_ENV['QZ_PRIVATE_KEY_PATH']; $_ENV['QZ_PRIVATE_KEY_PATH'] = '/inexistente/key.pem';
+    $a = $mkStation('Sem chave', ['cozinha' => 'Cozinha-USB']);
+    throws(fn() => QzSigner::sign(PrintStation::get($a), $u, json_encode(['call' => 'printers.find', 'params' => [], 'timestamp' => (int)(microtime(true) * 1000)])), 503);
+    eq(QzSigner::status()['configured'], false);
+    $_ENV['QZ_PRIVATE_KEY_PATH'] = $old;
+    eq(QzSigner::status()['configured'], true);
+    if (str_contains(json_encode(QzSigner::status()), 'PRIVATE')) throw new Exception('status vaza chave');
+});
+t('mapa de impressoras: só impressoras que a estação informou; só o proprietário configura (permissão settings)', function () use ($mkStation, $u) {
+    $a = $mkStation('Mapa', ['cozinha' => 'Cozinha-USB']);
+    throws(fn() => PrintStation::saveMap($a, ['copa' => ['printer' => 'Impressora-Inventada']], $u), 422);
+    foreach (['manager', 'waiter'] as $role) if (in_array('settings', Auth::permsOf(['role' => $role, 'perms' => null]), true)) throw new Exception("$role pode configurar");
+    if (!in_array('settings', Auth::permsOf(['role' => 'owner', 'perms' => null]), true)) throw new Exception('proprietário sem settings');
+});
+t('comanda de teste é marcada e não tem pedido', function () use ($u) {
+    $id = Printing::enqueueTest('copa', $u); $j = Db::one('SELECT * FROM print_jobs WHERE id = ?', [$id]);
+    eq($j['order_id'], null); eq($j['kind'], 'test');
+    $txt = implode("\n", array_column(Printing::build($j)['lines'], 't'));
+    if (!str_contains($txt, 'TESTE - NAO PRODUZIR')) throw new Exception('sem marca de teste');
+});
+
+echo "Hospedagem sem disco persistente\n";
+t('sessões no banco: gravar, ler, expirar e destruir', function () {
+    $h = new DbSessions();
+    $h->write('abc123', 'uid|i:7;'); eq($h->read('abc123'), 'uid|i:7;');
+    $h->write('abc123', 'uid|i:8;'); eq($h->read('abc123'), 'uid|i:8;'); eq((int)Db::val("SELECT COUNT(*) FROM app_sessions WHERE id = 'abc123'"), 1);
+    eq($h->read('inexistente'), '');
+    Db::exec("UPDATE app_sessions SET updated_at = 1 WHERE id = 'abc123'"); $h->gc(3600); eq($h->read('abc123'), '');
+    $h->write('x1', 'a'); $h->destroy('x1'); eq($h->read('x1'), '');
+});
+t('imagens no banco: grava, devolve só nomes válidos e o mesmo conteúdo', function () {
+    $_ENV['UPLOAD_DRIVER'] = 'db';
+    $im = imagecreatetruecolor(40, 30); ob_start(); imagejpeg($im, null, 80); $jpeg = (string)ob_get_clean();
+    $path = Uploads::put($jpeg); if (!preg_match('#^/uploads/[a-f0-9]{16}\.jpg$#', $path)) throw new Exception("caminho: $path");
+    $f = Uploads::get(basename($path)); eq($f['data'], $jpeg); eq($f['mime'], 'image/jpeg');
+    eq(Uploads::get('../../.env'), null); eq(Uploads::get('0000000000000000.jpg'), null);
+    unset($_ENV['UPLOAD_DRIVER']);
+});
+t('ambiente de testes: faixa, noindex e impressão física desligada por padrão', function () {
+    $h = View::stagingMark('<html><head><title>x</title></head><body class="a"><main>oi</main></body></html>');
+    if (!str_contains($h, 'AMBIENTE DE TESTES') || !str_contains($h, 'noindex')) throw new Exception('sem faixa/noindex');
+    eq(substr_count($h, 'AMBIENTE DE TESTES'), 1);
+    $_ENV['APP_ENV'] = 'staging'; eq(Printing::testEnvBlocked(), true); eq(Printing::claim(), null);
+    $_ENV['PRINT_ENABLED'] = '1'; eq(Printing::testEnvBlocked(), false);
+    unset($_ENV['APP_ENV'], $_ENV['PRINT_ENABLED']); eq(Printing::testEnvBlocked(), false);
 });
 
 echo "\nResultado: $pass passou, $fail falhou\n";

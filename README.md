@@ -55,7 +55,7 @@ Variáveis de ambiente do processo têm prioridade sobre o `.env`.
 Minificação (build) **não** é compressão HTTP: gzip/Brotli devem ser entregues pelo servidor (`public/.htaccess` traz as regras para Apache/LiteSpeed; verifique os cabeçalhos no servidor real). Medições e método: `docs/DESEMPENHO.md`.
 
 ## Documentação
-`docs/HOSPEDAGEM.md` (Hostinger e Vercel) · `docs/DEPLOY-HOSTMIA.md` (roteiro PHP+MySQL, escrito para a HostMia — **outra hospedagem**) · `docs/GUIA-GERENTE.md` · `docs/IMPRESSAO.md` · `docs/BACKUP-LGPD.md` · `docs/EQUIPE-SALAO.md` · `docs/CATALOGO.md` · `docs/IFOOD.md` · `docs/MOVIMENTO.md` · `docs/VALIDACAO-2026-11-04.md` · `docs/VALIDACAO-2026-11-04-publicacao.md` · `PROGRESSO.md`.
+`docs/HOSPEDAGEM.md` (Hostinger e Vercel) · `docs/DEPLOY-HOSTMIA.md` (roteiro PHP+MySQL, escrito para a HostMia — **outra hospedagem**) · `docs/GUIA-GERENTE.md` · `docs/IMPRESSAO.md` · `docs/BACKUP-LGPD.md` · `docs/EQUIPE-SALAO.md` · `docs/CATALOGO.md` · `docs/IFOOD.md` · `docs/MOVIMENTO.md` · `docs/VALIDACAO-2026-11-04.md` · `docs/VALIDACAO-2026-11-04-publicacao.md` · `docs/VALIDACAO-2026-11-04-qz-vercel.md` · `docs/VERCEL.md` · `PROGRESSO.md`.
 
 ## Estrutura
 `public/` (docroot) · `src/` (regras) · `views/` · `migrations/` · `database/` (cargas e exportação do catálogo) · `bin/` (CLI: migrate, build, backup, restore, create-admin, check, import-ifood, scan-secrets, agente de impressão) · `tests/` · `storage/` (sqlite, logs, backups: **fora do docroot e fora do Git**) · `docs/`.
@@ -64,7 +64,7 @@ Minificação (build) **não** é compressão HTTP: gzip/Brotli devem ser entreg
 Garçom: salão (`/garcom`). Gerente/caixa: pedidos, salão, caixa, cardápio, clientes, vendas, impressão (conforme permissões). Proprietário: tudo + usuários, permissões, auditoria, configurações e painel executivo. Matriz em `src/Auth.php`; fora da matriz, é negado.
 
 ## Pendências externas (não verificadas)
-Impressão física (a integração futura é a solução informada como "QZ3" — **identificação a confirmar**; ver `docs/IMPRESSAO.md`), MySQL/MariaDB real, e-mail real (`MAIL_DRIVER=mail|smtp`), hospedagem (Hostinger) e Vercel, teclado virtual/toque/leitor de tela em aparelhos reais, concorrência entre aparelhos e redes reais.
+Impressão física (integração **QZ Tray** implementada e testada só por software — nenhuma impressora, QZ real ou certificado confiável foi usado; ver `docs/IMPRESSAO.md` e `docs/VALIDACAO-2026-11-04-qz-vercel.md`), MySQL/MariaDB real, e-mail real (`MAIL_DRIVER=mail|smtp`), hospedagem (Hostinger) e Vercel, teclado virtual/toque/leitor de tela em aparelhos reais, concorrência entre aparelhos e redes reais.
 
 ## Segurança
 Não commite `.env`, bancos, backups, credenciais ou fotos privadas. Antes de publicar: `php bin/scan-secrets.php`.

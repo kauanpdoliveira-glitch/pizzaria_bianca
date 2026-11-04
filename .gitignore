@@ -10,6 +10,9 @@
 /storage/mail/
 /storage/backups/
 /storage/dev-credentials.txt
+/storage/qz/
+*.pem
+*.key
 /storage/ifood/original/
 
 # --- uploads: só o que é código/asset público autorizado entra no Git ---

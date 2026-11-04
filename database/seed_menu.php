@@ -113,6 +113,6 @@ foreach ($drinks as $i => $r) $prod($be, $r[0], null, $c($r[1]), null, null, $i)
 
 // imagem de cada categoria sem foto própria fica sem imagem (placeholder no front)
 echo "Cardápio importado do PDF.\n";
-// setores de produção do salão: bebidas vão ao balcão/bar; o resto à cozinha (editável por categoria no painel)
-Db::exec("UPDATE categories SET sector = CASE WHEN name = 'Bebidas' THEN 'balcao' ELSE 'cozinha' END WHERE sector IS NULL");
+// destinos de impressão (códigos estáveis): bebidas e sobremesas vão à copa/bar; o resto à cozinha (editável por categoria no painel)
+Db::exec("UPDATE categories SET sector = CASE WHEN name IN ('Bebidas','Sobremesas') THEN 'copa' ELSE 'cozinha' END WHERE sector IS NULL");
 require __DIR__ . "/seed_ingredients.php";

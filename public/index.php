@@ -16,6 +16,7 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 header('X-Frame-Options: DENY');
 header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
 if (is_https()) header('Strict-Transport-Security: max-age=31536000');
+if (env('APP_ENV') === 'staging') header('X-Robots-Tag: noindex, nofollow');
 
 try {
     App::run();

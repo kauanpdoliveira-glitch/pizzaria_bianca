@@ -25,5 +25,40 @@
 - *Acentos:* a comanda sai sem acentos (ASCII) de propósito, para funcionar em qualquer modelo.
 - *Largura:* 58 mm = 32 colunas, 80 mm = 48. Ajuste em Configurações → Setores.
 
-## Integração futura: solução "QZ3" (a confirmar)
-O usuário informou que pretende integrar uma solução de impressão chamada **"QZ3"**. **Não se presume** produto, versão, forma de instalação (aplicativo local, serviço, navegador) nem protocolo. Antes de implementar: confirmar o nome e a versão exatos, como ele recebe trabalhos (WebSocket local, HTTP, driver), requisitos de certificado/assinatura e o modelo da impressora. Pontos de integração existentes e estáveis: tabela `print_jobs` (conteúdo ESC/POS por setor), API do agente (`POST /api/print/claim`, `POST /api/print/{uuid}/result`, token Bearer) e a tela **Impressão** do painel. Nenhuma impressora real foi conectada.
+## Estações QZ Tray (navegador da loja) — implementado, validado só por software
+O usuário confirmou que a solução é o **QZ Tray** (https://qz.io). A integração segue este desenho:
+
+```
+cliente/garçom (celular) → servidor → fila persistente (print_jobs)
+                                         ↑ reserva atômica (uma estação por trabalho)
+PC da loja: navegador logado em /admin/estacao/N  ←→  QZ Tray local (wss://localhost:8181…)  →  impressora
+```
+Celulares de clientes e garçons **nunca** imprimem direto. Só uma **estação** (navegador autorizado + QZ Tray no mesmo computador) busca trabalhos.
+
+### Destinos
+Três destinos lógicos com códigos estáveis: `cozinha`, `copa` (Copa/Bar) e `balcao` (Balcão/Delivery). O destino do item vem do **produto** (`print_sector`) ou da **categoria** (`sector`). Cozinha e copa só recebem os **seus** itens (nunca comanda vazia). O resumo do balcão sai para retirada/entrega. Item sem destino gera **pendência visível** (estado "Sem destino") — nunca é descartado em silêncio.
+
+### Estados (honestos)
+`Pendente → Reservado → Enviando → Enviado ao subsistema de impressão` · `Falhou` · `Resultado incerto`. "Enviado ao subsistema" = o QZ/spooler **aceitou** o trabalho; não prova papel na mão de ninguém. Falha **antes** do envio volta à fila (até 3 tentativas); erro **depois** do envio ou reserva sem confirmação = **incerto**, que **nunca** é reenviado sozinho: o operador confere o papel e usa **Reenviar** (auditado). Reservas expiram em 90 s e voltam à fila.
+
+### Configurar (somente o proprietário: permissão `settings`)
+1. **Impressão → Estações → Nova estação** (ex.: "Caixa — PC da loja").
+2. No computador da loja, instale o QZ Tray, faça login no painel e abra **Abrir como estação**. A página lista as impressoras que o sistema operacional expõe.
+3. Em **Estações**, escolha a impressora de cada destino, as colunas (48 = 80 mm; 32 = 58 mm), o charset (`ascii` é o padrão seguro; `cp860` para acentos **só depois de testar no papel**) e o corte.
+4. **Imprimir teste (NÃO PRODUZIR)** envia uma comanda de teste marcada. Só faça com a impressora ligada e a loja ciente.
+
+### Assinatura do QZ (certificado)
+- A **chave privada fica só no servidor** (`QZ_PRIVATE_KEY_PATH` fora de `public/`, ou `QZ_PRIVATE_KEY` em variável de ambiente). O certificado público é lido de `QZ_CERT_PATH`/`QZ_CERT` e entregue em `/admin/api/qz/certificate` a usuários autenticados. Nada disso vai para o JavaScript, o Git, logs ou ZIP.
+- O servidor é um **signer validador**, não assina qualquer coisa: só `printers.find` e `print`; `print` só para o trabalho em estado "Enviando" **desta estação**, na impressora **mapeada**, com bytes cujo SHA-256 é o registrado na reserva; timestamp ±90 s; mensagem idêntica nunca é assinada duas vezes; máx. 120 assinaturas/min por estação; tudo é registrado em `print_sign_log`.
+- **Desenvolvimento:** `php bin/qz-dev-cert.php` cria um par **autoassinado** em `storage/qz/` (ignorado pelo Git). O QZ só confia nele se você o importar manualmente no *Site Manager* do QZ — apenas para teste.
+- **Produção / impressão silenciosa:** exige um certificado que o **QZ Tray já confie** (certificado emitido pelo portal do QZ, ou o *override* instalado e mantido pela própria loja no computador). **Isto não é fornecido aqui**: depende de contratação/licença (possível custo) e de instalação no computador da loja. Sem isso o QZ mostra uma janela de confirmação a cada impressão (funciona, mas não é silencioso). Não há atalho de "ignorar certificado" nem desativação de TLS.
+- Se a chave/certificado não estiverem configurados, o servidor recusa assinar (HTTP 503) e a estação opera em modo manual do QZ.
+
+### Pendências externas (dependem da loja)
+Sistema operacional do computador; modelos das 3 impressoras e conexão (USB/rede); nomes das filas no sistema; largura do papel; charset que o modelo aceita; certificado/licença do QZ para impressão silenciosa; autorização para um **teste físico** (comanda "TESTE — NÃO PRODUZIR"). **Nenhuma impressora física foi usada**: o que foi comprovado está em `docs/VALIDACAO-2026-11-04-qz-vercel.md`.
+
+### Diagnóstico da estação
+- *QZ desconectado:* confirme o ícone do QZ na bandeja; a página reconecta sozinha (espera crescente com variação). A porta é local (8181/8182 e alternativas); a CSP libera só essas na página da estação.
+- *Impressora não aparece:* ela precisa estar instalada no sistema operacional; clique em **Atualizar impressoras**.
+- *"Assinatura recusada":* leia o motivo no registro da página e em `print_sign_log` (impressora diferente, conteúdo diferente, repetição, fora da janela).
+- *Nada imprime em ambiente de testes:* `APP_ENV=staging` desliga a impressão física, a menos que `PRINT_ENABLED=1`.

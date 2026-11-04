@@ -8,7 +8,16 @@ final class View
     {
         $content = self::capture($name, $data);
         extract($data + ['title' => 'Pizzaria Bianca', 'description' => '', 'page' => $name], EXTR_SKIP);
-        require APP_ROOT . "/views/$layout.php";
+        if (env('APP_ENV') !== 'staging') { require APP_ROOT . "/views/$layout.php"; return; }
+        ob_start(); require APP_ROOT . "/views/$layout.php"; echo self::stagingMark((string)ob_get_clean());
+    }
+
+    /** Ambiente de testes: faixa visível em toda página + noindex (nada de dados reais, pagamentos ou impressão automática). */
+    public static function stagingMark(string $html): string
+    {
+        $banner = '<div role="status" style="position:sticky;top:0;z-index:99999;background:#7a1f00;color:#fff;padding:6px 12px;font:600 13px/1.3 system-ui,sans-serif;text-align:center">AMBIENTE DE TESTES — dados fictícios; não faça pedidos reais</div>';
+        $html = preg_replace('/(<body\b[^>]*>)/i', '$1' . $banner, $html, 1) ?? $html;
+        return preg_replace('/<\/head>/i', '<meta name="robots" content="noindex,nofollow"></head>', $html, 1) ?? $html;
     }
 
     public static function capture(string $name, array $data = []): string

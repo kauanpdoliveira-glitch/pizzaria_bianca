@@ -35,6 +35,7 @@ final class Auth
         session_name('bianca_sid');
         session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => is_https(), 'httponly' => true, 'samesite' => 'Lax']);
         ini_set('session.use_strict_mode', '1');
+        if (env('SESSION_DRIVER') === 'db') session_set_save_handler(new DbSessions(), true);   // hospedagem sem disco persistente
         session_start();
     }
 
