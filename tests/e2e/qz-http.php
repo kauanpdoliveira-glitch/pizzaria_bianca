@@ -117,6 +117,7 @@ chk('layouts: dono salva rascunho (não ativa, não imprime)', $o->req('POST', '
 $lid = (int)Db::val("SELECT id FROM print_layouts WHERE name = 'E2E rascunho'");
 chk('layouts: gerente sem autorização não salva nem ativa', in_array($m->req('POST', '/admin/impressao/layout', ['sector' => 'cozinha', 'act' => 'restore', 'id' => $lid])['code'], [403, 302], true) && Db::val('SELECT status FROM print_layouts WHERE id = ' . $lid) === 'draft');
 chk('layouts: dono ativa', $o->req('POST', '/admin/impressao/layout', ['sector' => 'cozinha', 'act' => 'restore', 'id' => $lid])['code'] === 302 && Db::val('SELECT status FROM print_layouts WHERE id = ' . $lid) === 'active');
+$stPw = 'Es' . bin2hex(random_bytes(6)) . 'A1'; $stPw2 = 'Ou' . bin2hex(random_bytes(6)) . 'B2';   // senhas aleatórias só para este teste (banco temporário)
 // ---- convites e conta da estação (identidade própria, mínimo privilégio) ----
 $md = getenv('MAIL_LOG_DIR') ?: ''; $lastMail = function () use ($md) { $f = glob("$md/*.eml"); sort($f); return $f ? file_get_contents(end($f)) : ''; };
 $hz = $anon->req('GET', '/saude'); chk('saúde: /saude responde sem dados sensíveis', $hz['code'] === 200 && ($hz['json']['ok'] ?? false) === true && !str_contains($hz['body'], 'sqlite') && !str_contains($hz['body'], 'password'));
@@ -128,9 +129,9 @@ $eml = $lastMail(); preg_match('#/equipe/convite\?token=([a-f0-9]{64})#', $eml, 
 chk('convite: e-mail com link do APP_URL e token de 64 hex', $itok !== '' && str_contains($eml, 'http://127.0.0.1:8097/equipe/convite'), substr($eml, 0, 200));
 $st1 = $anon->req('GET', '/equipe/convite?token=' . $itok); chk('convite: página pede a senha própria', $st1['code'] === 200 && str_contains($st1['body'], 'Definir senha'));
 chk('convite: senha fraca recusada', $anon->req('POST', '/equipe/convite', ['token' => $itok, 'password' => 'abc', 'password2' => 'abc'], false, true)['code'] === 422);
-chk('convite: ativa com senha própria', str_contains($anon->req('POST', '/equipe/convite', ['token' => $itok, 'password' => 'EstacaoSenha2026', 'password2' => 'EstacaoSenha2026'], false, true)['body'], 'acesso ativado') || (int)Db::val("SELECT active FROM users WHERE email = 'estacao@teste.local'") === 1);
-chk('convite: segundo uso do link é recusado', $anon->req('POST', '/equipe/convite', ['token' => $itok, 'password' => 'OutraSenha2026', 'password2' => 'OutraSenha2026'], false, true)['code'] === 422);
-$sc = new C('st'); $r = $sc->login('estacao@teste.local', 'EstacaoSenha2026'); $loc = preg_match('/Location:\s*(\S+)/i', $r['head'], $lm) ? $lm[1] : ''; chk('estação: login e destino /admin/estacao', $r['code'] === 302 && str_ends_with($loc, '/admin/estacao'), $loc);
+chk('convite: ativa com senha própria', str_contains($anon->req('POST', '/equipe/convite', ['token' => $itok, 'password' => $stPw, 'password2' => $stPw], false, true)['body'], 'acesso ativado') || (int)Db::val("SELECT active FROM users WHERE email = 'estacao@teste.local'") === 1);
+chk('convite: segundo uso do link é recusado', $anon->req('POST', '/equipe/convite', ['token' => $itok, 'password' => $stPw2, 'password2' => $stPw2], false, true)['code'] === 422);
+$sc = new C('st'); $r = $sc->login('estacao@teste.local', $stPw); $loc = preg_match('/Location:\s*(\S+)/i', $r['head'], $lm) ? $lm[1] : ''; chk('estação: login e destino /admin/estacao', $r['code'] === 302 && str_ends_with($loc, '/admin/estacao'), $loc);
 $sc->req('GET', '/admin/estacao'); chk('estação: abre a página da estação', $sc->req('GET', "/admin/estacao/$sid")['code'] === 200);
 chk('estação: heartbeat e certificado permitidos', $sc->req('POST', "/admin/api/estacao/$sid/heartbeat", ['qz' => false], true)['code'] === 200 && $sc->req('GET', '/admin/api/qz/certificate')['code'] === 200);
 foreach (['/admin', '/admin/usuarios', '/admin/config/impressao', '/admin/config/impressao/layouts', '/admin/caixa', '/admin/config'] as $p) chk("estação: sem acesso a $p", in_array($sc->req('GET', $p)['code'], [302, 403], true));

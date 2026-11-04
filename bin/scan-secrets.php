@@ -21,8 +21,9 @@ $rules = [
     'URL com credencial' => '#\b[a-z][a-z0-9+.-]*://[^/\s:@"\']+:[^/\s@"\']{3,}@[^/\s"\']+#i',
     'senha/segredo literal' => '/\b(?:password|passwd|senha|secret|api[_-]?key|token)\b["\']?\s*(?:=>|=|:)\s*["\'][^"\'\s$\{\}<>]{10,}["\']/i',
 ];
-// valores claramente didáticos/placeholders (não são segredos)
-$ok = '/(exemplo|example|SEU-|EMAIL_AQUI|SENHA_FORTE|placeholder|xxxx|\*\*\*\*|password_hash\(|\$pw|\$pass|\$tok|senhaforte|abcdefghijklmnopqrstuu|\$_POST|\$in\[|getenv|env\()/i';
+// valores claramente didáticos/placeholders (não são segredos). EstacaoSenha2026/OutraSenha2026: senhas de TESTE de um banco temporário,
+// presentes no histórico (commit 8f420ca) por um teste e2e corrigido logo depois; nunca existiram em ambiente real.
+$ok = '/(exemplo|example|SEU-|EMAIL_AQUI|SENHA_FORTE|placeholder|xxxx|\*\*\*\*|password_hash\(|\$pw|\$pass|\$tok|senhaforte|abcdefghijklmnopqrstuu|EstacaoSenha2026|OutraSenha2026|\$_POST|\$in\[|getenv|env\()/i';
 $badNames = '#(^|/)(\.env|agent\.ini|dev-credentials\.txt)$|\.(sqlite|sqlite3|db|pem|key|p12|pfx|zip|sql\.gz|dump)$|(^|/)storage/(mail|backups|logs)/#';
 $allowName = '#(^|/)\.env\.example$#';
 $found = [];
