@@ -14,7 +14,7 @@ Db::$driver === 'mysql' ? $pdo->exec('SET FOREIGN_KEY_CHECKS=0') : $pdo->exec('P
 $pdo->beginTransaction();
 try {
     foreach (array_reverse(array_keys($d['tables'])) as $t) $pdo->exec("DELETE FROM $t");
-    foreach ($d['tables'] as $t => $rows) foreach ($rows as $r) Db::insert($t, $r);
+    foreach ($d['tables'] as $t => $rows) foreach ($rows as $r) { foreach ($r as $k => $v) if (is_array($v) && isset($v['__b64'])) $r[$k] = base64_decode($v['__b64']); Db::insert($t, $r); }
     $pdo->commit();
 } catch (Throwable $e) { $pdo->rollBack(); exit('Falhou e nada foi alterado: ' . $e->getMessage() . "\n"); }
 Db::$driver === 'mysql' ? $pdo->exec('SET FOREIGN_KEY_CHECKS=1') : $pdo->exec('PRAGMA foreign_keys=ON');

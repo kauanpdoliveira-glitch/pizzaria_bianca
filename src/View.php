@@ -15,7 +15,7 @@ final class View
     /** Ambiente de testes: faixa visível em toda página + noindex (nada de dados reais, pagamentos ou impressão automática). */
     public static function stagingMark(string $html): string
     {
-        $banner = '<div role="status" style="position:sticky;top:0;z-index:99999;background:#7a1f00;color:#fff;padding:6px 12px;font:600 13px/1.3 system-ui,sans-serif;text-align:center">AMBIENTE DE TESTES — dados fictícios; não faça pedidos reais</div>';
+        $banner = '<div role="status" style="position:sticky;top:0;z-index:99999;background:#7a1f00;color:#fff;padding:6px 12px;font:600 13px/1.3 system-ui,sans-serif;text-align:center">HOMOLOGAÇÃO — testes da Bianca: não é a loja oficial; pedidos aqui são de teste</div>';
         $html = preg_replace('/(<body\b[^>]*>)/i', '$1' . $banner, $html, 1) ?? $html;
         return preg_replace('/<\/head>/i', '<meta name="robots" content="noindex,nofollow"></head>', $html, 1) ?? $html;
     }

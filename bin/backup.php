@@ -9,9 +9,13 @@ require __DIR__ . '/../src/bootstrap.php';
 $dir = $argv[1] ?? APP_ROOT . '/storage/backups';
 if (!is_dir($dir)) mkdir($dir, 0700, true);
 $tables = Db::$driver === 'mysql' ? array_map('current', Db::all('SHOW TABLES')) : array_column(Db::all("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"), 'name');
-$tables = array_values(array_diff($tables, ['schema_migrations', 'login_attempts', 'rate_limits', 'password_resets'])); // efêmero ou sensível (tokens)
+$tables = array_values(array_diff($tables, ['schema_migrations', 'login_attempts', 'rate_limits', 'password_resets', 'app_sessions'])); // efêmero ou sensível (tokens)
 $data = ['version' => 1, 'created_at' => now()];
-foreach ($tables as $t) $data['tables'][$t] = Db::all("SELECT * FROM $t");
+foreach ($tables as $t) {   // colunas binárias (imagens no banco) vão em base64 para o JSON não quebrar
+    $rows = Db::all("SELECT * FROM $t");
+    foreach ($rows as &$r) foreach ($r as $k => &$v) if (is_resource($v)) $v = ['__b64' => base64_encode(stream_get_contents($v))]; elseif (is_string($v) && !mb_check_encoding($v, 'UTF-8')) $v = ['__b64' => base64_encode($v)];
+    unset($r, $v); $data['tables'][$t] = $rows;
+}
 $file = $dir . '/bianca-' . date('Ymd-His') . '.json';
 file_put_contents($file, json_encode($data, JSON_UNESCAPED_UNICODE));
 @chmod($file, 0600);

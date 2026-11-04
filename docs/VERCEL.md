@@ -49,3 +49,6 @@ Tempo/memória por função e *cold start* do runtime PHP; MySQL externo adicion
 
 ## Confirmado na conta (04/11/2026)
 Conta aberta no navegador: time `kauanpdoliveira-7733`, **plano Hobby ativo, sem cartão cadastrado**. Pela definição oficial de uso comercial (fair use guidelines: qualquer deployment usado para ganho financeiro de qualquer envolvido, incluindo *anunciar a venda de produto ou serviço* e *receber para criar/atualizar/hospedar o site*), um site de pizzaria que vende pelo cardápio digital exige **Pro ou Enterprise**. O Hobby **não** é uma opção elegível. Nenhum projeto foi criado nem alterado nessa conta.
+
+## Segunda conta verificada (04/11/2026)
+Conta/equipe `paingodev-7164`: **plano Hobby ativo**, nenhum projeto, nenhum projeto da Bianca. A troca de conta **não muda** a elegibilidade: o Hobby é restrito a uso não comercial e pessoal (fair use guidelines), e testes operacionais de uma pizzaria de várias semanas, com pedidos pelo site, são uso comercial. Por isso **nada foi criado nem publicado** nessa conta. Opção elegível na Vercel: **Pro** (US$ 20 por usuário por mês, com cartão e autorização do proprietário), que ainda exigiria MySQL externo e runtime PHP da comunidade. Alternativa sem Vercel: hospedagem PHP/MySQL (Hostinger/HostMia).

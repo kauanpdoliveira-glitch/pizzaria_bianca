@@ -1081,8 +1081,8 @@ t('imagens no banco: grava, devolve só nomes válidos e o mesmo conteúdo', fun
 });
 t('ambiente de testes: faixa, noindex e impressão física desligada por padrão', function () {
     $h = View::stagingMark('<html><head><title>x</title></head><body class="a"><main>oi</main></body></html>');
-    if (!str_contains($h, 'AMBIENTE DE TESTES') || !str_contains($h, 'noindex')) throw new Exception('sem faixa/noindex');
-    eq(substr_count($h, 'AMBIENTE DE TESTES'), 1);
+    if (!str_contains($h, 'HOMOLOGAÇÃO — testes da Bianca') || !str_contains($h, 'noindex')) throw new Exception('sem faixa/noindex');
+    eq(substr_count($h, 'HOMOLOGAÇÃO — testes da Bianca'), 1);
     $_ENV['APP_ENV'] = 'staging'; eq(Printing::testEnvBlocked(), true); eq(Printing::claim(), null);
     $_ENV['PRINT_ENABLED'] = '1'; eq(Printing::testEnvBlocked(), false);
     unset($_ENV['APP_ENV'], $_ENV['PRINT_ENABLED']); eq(Printing::testEnvBlocked(), false);
