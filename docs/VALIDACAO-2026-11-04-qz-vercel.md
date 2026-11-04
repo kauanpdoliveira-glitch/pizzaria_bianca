@@ -58,3 +58,8 @@ Ponto de recuperação: tag `pre-qz-tray` (commit `5ac5f04`) e cópia `D:\Pizzar
 - Os 3 trabalhos do pedido #1 permaneceram **retidos**.
 - Regras validadas por software (90 testes) e no papel: balcão completo, cozinha só pizza, copa só bebida, sem comanda vazia, marca "TESTE — NÃO PRODUZIR".
 - **Pendentes:** ESC/POS e corte em térmica, 58/80 mm, impressão silenciosa (certificado confiável), Vercel/URL fixa (plano elegível + MySQL).
+
+## Rodada 5 — editor de layouts de comandas (04/11/2026)
+- Editor `/admin/config/impressao/layouts`: blocos validados por lista branca, prévia com dados fictícios, rascunho/ativação/histórico/restauração, versão (`layout_id`) por trabalho, reimpressão com o layout do original, modelos iniciais. 97 testes unitários e 51 HTTP aprovados.
+- **Teste físico (autorizado):** 3 páginas A4 do layout **Minimalista** (rascunho, não ativado) — balcão (entrega), cozinha e copa (dois sabores) — jobs #11–#13, 1 via, QZ 2.3.0 com autorização manual, Epson L3210 (HTML). **Saída física confirmada pelo usuário: as 3 folhas saíram boas.**
+- **Não validado:** logo no QZ real; ESC/POS, corte e larguras 58/80 mm em térmica; impressão silenciosa; hospedagem definitiva (Vercel exige plano elegível + MySQL externo; ver `docs/VERCEL.md`).
