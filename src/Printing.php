@@ -11,7 +11,7 @@ declare(strict_types=1);
  */
 final class Printing
 {
-    public const STATUS = ['queued' => 'Pendente', 'reserved' => 'Reservado', 'sending' => 'Enviando', 'printing' => 'Enviando', 'printed' => 'Enviado ao subsistema de impressão',
+    public const STATUS = ['held' => 'Retido (pausado pelo operador)', 'queued' => 'Pendente', 'reserved' => 'Reservado', 'sending' => 'Enviando', 'printing' => 'Enviando', 'printed' => 'Enviado ao subsistema de impressão',
         'failed' => 'Falhou', 'uncertain' => 'Resultado incerto', 'unrouted' => 'Sem destino'];
     public const SECTORS = ['cozinha' => 'Cozinha', 'copa' => 'Copa/Bar', 'balcao' => 'Balcão/Delivery'];
     private const STALE_SECONDS = 120;
@@ -139,6 +139,22 @@ final class Printing
         $lines = $job['order_id'] ? self::lines((array)Orders::get((int)$job['order_id']), $job, $wrap) : self::testLines($job, $wrap);
         if ($profile['mode'] === 'html') return ['lines' => $lines, 'bytes' => PrintFormatter::html($lines, $profile), 'mode' => 'html'];
         return ['lines' => $lines, 'bytes' => PrintFormatter::escpos($lines, $profile), 'mode' => 'escpos'];
+    }
+
+    /** Retém os trabalhos pendentes (não apaga, não marca como impresso): nenhuma estação os reserva até a liberação explícita. */
+    public static function holdQueued(array $user): int
+    {
+        $n = Db::exec("UPDATE print_jobs SET status = 'held', last_error = 'Retido pelo operador; libere explicitamente para imprimir.' WHERE status = 'queued' AND station_id IS NULL");
+        Auth::audit('print.hold', "$n trabalho(s) retido(s)");
+        return $n;
+    }
+
+    /** Libera UM trabalho retido de volta à fila (decisão explícita e auditada). */
+    public static function release(int $jobId, array $user): void
+    {
+        $n = Db::exec("UPDATE print_jobs SET status = 'queued', last_error = NULL WHERE id = ? AND status = 'held'", [$jobId]);
+        if ($n !== 1) throw new HttpError(422, 'Só trabalhos retidos podem ser liberados.');
+        Auth::audit('print.release', "job #$jobId");
     }
 
     /** Ambiente de testes (APP_ENV=staging): nenhuma impressão física sai, a menos que PRINT_ENABLED=1 seja definido de propósito. */

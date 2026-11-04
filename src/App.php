@@ -34,7 +34,7 @@ final class App
             ['GET', '#^/admin/clientes$#', 'admCustomers'], ['GET', '#^/admin/relatorios$#', 'admReports'], ['GET', '#^/admin/relatorios\.csv$#', 'admReportsCsv'],
             ['GET', '#^/admin/config$#', 'admConfig'], ['POST', '#^/admin/config$#', 'admConfigSave'],
             ['GET', '#^/admin/usuarios$#', 'admUsers'], ['POST', '#^/admin/usuarios$#', 'admUsersSave'], ['GET', '#^/admin/acessos$#', 'admAccess'],
-            ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'],
+            ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'], ['POST', '#^/admin/impressao/reter$#', 'admPrintHold'], ['POST', '#^/admin/impressao/(\d+)/liberar$#', 'admPrintRelease'],
             // estações de impressão (QZ Tray)
             ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
             ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
@@ -747,6 +747,18 @@ final class App
         $_SESSION['new_token'] = Printing::newAgentToken();
         Auth::audit('print.token');
         redirect('/admin/impressao');
+    }
+
+    private static function admPrintHold(): void
+    {
+        $u = Auth::require('print_config');
+        self::flash(Printing::holdQueued($u) . ' trabalho(s) pendente(s) retido(s). Nada foi apagado nem impresso.'); redirect('/admin/config/impressao');
+    }
+    private static function admPrintRelease(string $id): void
+    {
+        $u = Auth::require('print_config');
+        try { Printing::release((int)$id, $u); self::flash('Trabalho #' . (int)$id . ' liberado para a fila.'); } catch (HttpError $e) { self::flash($e->getMessage(), true); }
+        redirect('/admin/config/impressao');
     }
 
     // ================= configurações de impressão e estações (QZ Tray) =================

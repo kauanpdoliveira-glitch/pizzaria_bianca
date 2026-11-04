@@ -870,6 +870,22 @@ t('permissão print_config: só proprietário; gerente só se autorizado explici
     if (!in_array('print_config', Auth::permsOf(['role' => 'owner', 'perms' => null]), true)) throw new Exception('proprietário sem permissão');
 });
 
+t('reter pendentes: nada apagado nem impresso; estação armada não os reserva; liberar é explícito e individual', function () use ($order, $key, $pid, $u, $mkStation) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    $sz = (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]);
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sz, 'qty' => 1]]), $key());
+    $before = Db::all('SELECT id, sector, payload_hash, created_at FROM print_jobs ORDER BY id');
+    eq(Printing::holdQueued($u), count($before));
+    eq(array_unique(array_column(Db::all('SELECT status FROM print_jobs'), 'status')), ['held']);
+    eq(Db::all('SELECT id, sector, payload_hash, created_at FROM print_jobs ORDER BY id'), $before);   // nada apagado/alterado
+    $a = $mkStation('Armada', ['cozinha' => 'Cozinha-USB', 'balcao' => 'Balcao-LAN']);   // arma a estação
+    eq(PrintStation::claim($a), null); eq(Printing::claim(), null);
+    $id = (int)Db::val("SELECT id FROM print_jobs WHERE sector = 'cozinha'"); Printing::release($id, $u);
+    eq(PrintStation::claim($a)['sector'], 'cozinha');                                       // só o liberado
+    throws(fn() => Printing::release($id, $u), 422);
+    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE status = 'held'"), count($before) - 1);
+});
+
 echo "Hospedagem sem disco persistente\n";
 t('sessões no banco: gravar, ler, expirar e destruir', function () {
     $h = new DbSessions();
