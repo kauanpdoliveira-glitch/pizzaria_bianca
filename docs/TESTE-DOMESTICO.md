@@ -30,3 +30,12 @@ Antes de tudo: há **uma ou mais páginas impressas**; use papel comum e tenha a
 
 ## O que registrar
 Pedido salvo (sim/não) · trabalhos criados por destino · estado final de cada trabalho · saída física (sim/não, por destino) · houve janela de confirmação do QZ (sim/não) · o que não funcionou.
+
+## Como o ambiente de teste é aberto para o telefone (túnel temporário)
+O app roda **no seu computador** e um túnel gratuito da Cloudflare (*Quick Tunnel*, `cloudflared`) dá ao telefone uma URL `https://….trycloudflare.com` enquanto a janela ficar aberta. Não é hospedagem: se o PC desligar, a URL deixa de funcionar e muda na próxima execução. Quick Tunnels são para testes (sem garantia de disponibilidade).
+
+```powershell
+powershell -ExecutionPolicy Bypass -File bin\teste-tunel.ps1
+```
+O script usa banco próprio (`storage\teste-tunel.sqlite`, fora do Git), mostra **uma vez** a senha do proprietário de teste, abre a loja 24 h **só nesse banco**, liga a faixa "AMBIENTE DE TESTES" + `noindex` e `PRINT_ENABLED=1` (impressão física habilitada de propósito). Requer PHP 8.2+ no PATH e o `cloudflared.exe` oficial (https://github.com/cloudflare/cloudflared/releases; confira o SHA-256 da versão). **Faça o login no painel pelo computador** (`http://127.0.0.1:8080/equipe`) e deixe o telefone só para o pedido.
+Limites: todos os acessos chegam ao app como `127.0.0.1` (o limite de tentativas de login é compartilhado); a URL é pública enquanto estiver aberta — só dados fictícios.
