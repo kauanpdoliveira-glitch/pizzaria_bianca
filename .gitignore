@@ -1,0 +1,29 @@
+# --- segredos e configuração local ---
+/.env
+/.env.*
+!/.env.example
+/agent.ini
+
+# --- bancos, logs, e-mails de teste, backups e credenciais de desenvolvimento ---
+/storage/*.sqlite*
+/storage/logs/
+/storage/mail/
+/storage/backups/
+/storage/dev-credentials.txt
+/storage/ifood/original/
+
+# --- uploads: só o que é código/asset público autorizado entra no Git ---
+/public/uploads/*
+!/public/uploads/.htaccess
+!/public/uploads/ifood/
+
+# --- ferramentas locais, pacotes e temporários ---
+/.claude/
+*.zip
+*.sha256
+*.log
+*.tmp
+Thumbs.db
+.DS_Store
+/node_modules/
+/vendor/

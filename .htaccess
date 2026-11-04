@@ -1,0 +1,9 @@
+# Rede de segurança caso o domínio aponte para a raiz do projeto em vez de public/.
+# O correto é apontar o domínio para public/ (veja docs/DEPLOY-HOSTMIA.md).
+Options -Indexes
+RewriteEngine On
+RewriteRule ^(src|views|migrations|database|bin|tests|storage|docs)(/|$) - [F,L]
+RewriteRule ^\.env - [F,L]
+RewriteRule ^agent\.ini - [F,L]
+RewriteCond %{REQUEST_URI} !^/public/
+RewriteRule ^(.*)$ public/$1 [L]

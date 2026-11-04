@@ -1,0 +1,7 @@
+<h1>Clientes</h1>
+<p class="muted">Guardamos apenas nome e telefone (e o endereço dentro de cada pedido), o necessário para atender e entregar. O cadastro é único por telefone.</p>
+<form class="filters" method="get"><label>Buscar por nome ou telefone<input name="q" value="<?= e($q) ?>"></label><button class="b">Buscar</button></form>
+<div class="two-col"><div class="tw"><table><thead><tr><th>Nome</th><th>Telefone</th><th class="r">Pedidos</th><th class="r">Total (sem cancelados)</th><th>Último</th></tr></thead><tbody>
+<?php foreach ($rows as $c): ?><tr class="<?= $sel === (int)$c['id'] ? 'sel' : '' ?>"><td><a href="?id=<?= (int)$c['id'] ?>&q=<?= urlencode($q) ?>"><?= e($c['name']) ?></a></td><td><?= e($c['phone']) ?></td><td class="r"><?= (int)$c['n'] ?></td><td class="r"><?= e(money((int)$c['total'])) ?></td><td><?= $c['last_order_at'] ? e(date('d/m/Y', strtotime($c['last_order_at']))) : '—' ?></td></tr><?php endforeach; ?>
+<?php if (!$rows): ?><tr><td colspan="5" class="muted">Nenhum cliente.</td></tr><?php endif; ?></tbody></table></div>
+<?php if ($hist): ?><section class="panel"><h2>Pedidos do cliente</h2><ul class="ev"><?php foreach ($hist as $o): ?><li><a href="/admin/pedido/<?= (int)$o['id'] ?>">#<?= (int)$o['id'] ?></a> · <?= e(date('d/m/Y H:i', strtotime($o['created_at']))) ?> · <?= e(Orders::STATUS[$o['status']]) ?> · <?= e(money((int)$o['total_cents'])) ?></li><?php endforeach; ?></ul></section><?php endif; ?></div>

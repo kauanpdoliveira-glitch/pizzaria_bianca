@@ -1,0 +1,365 @@
+'use strict';
+(() => {
+  const fmt = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fill = (el, ...k) => el.replaceChildren(...k.flat().filter(x => x != null && x !== false)); // ignora null/false (condicionais); usado também no acompanhamento
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const h = (tag, attrs = {}, ...kids) => {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === false || v == null) continue;
+      if (k === 'class') el.className = v; else if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v === true ? '' : v);
+    }
+    for (const k of kids.flat()) if (k != null && k !== false) el.append(k.nodeType ? k : document.createTextNode(k));
+    return el;
+  };
+  const toast = msg => { const t = $('#toast'); if (!t) return; t.textContent = msg; t.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('show'), 2800); };
+  const api = async (url, opt = {}) => {
+    const r = await fetch(url, { ...opt, headers: { 'Content-Type': 'application/json', ...(opt.headers || {}) } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.error || 'Erro de conexão'), { status: r.status });
+    return j;
+  };
+
+  // ---------- carrinho (só itens; nenhum dado pessoal) ----------
+  const Cart = {
+    key: 'bianca_cart_v1',
+    get() { try { return JSON.parse(localStorage.getItem(this.key)) || []; } catch { return []; } },
+    set(v) { try { localStorage.setItem(this.key, JSON.stringify(v)); } catch { /* armazenamento bloqueado */ } document.dispatchEvent(new Event('cart')); },
+    add(it) {
+      const c = this.get(), sig = JSON.stringify([it.product_id, it.size_id, it.flavors, [...it.options].sort(), [...(it.removals || [])].sort(), it.notes]);
+      const ex = c.find(x => x.sig === sig);
+      if (ex) ex.qty = Math.min(50, ex.qty + it.qty); else c.push({ ...it, sig });
+      this.set(c);
+    },
+    replace(i, it) { const c = this.get(); if (!c[i]) return this.add(it); c[i] = { ...it, sig: JSON.stringify([it.product_id, it.size_id, it.flavors, [...it.options].sort(), [...(it.removals || [])].sort(), it.notes, Date.now()]) }; this.set(c); },
+    setQty(i, q) { const c = this.get(); if (q < 1) c.splice(i, 1); else c[i].qty = Math.min(50, q); this.set(c); },
+    clear() { this.set([]); },
+    payload() { return this.get().map(({ product_id, size_id, flavors, options, removals, qty, notes }) => ({ product_id, size_id, flavors, options, removals: removals || [], qty, notes })); },
+    estimate() { return this.get().reduce((s, x) => s + x.unit * x.qty, 0); },
+    count() { return this.get().reduce((s, x) => s + x.qty, 0); },
+  };
+
+  const page = document.body.dataset.page;
+
+  // ---------- cardápio ----------
+  // Ilustrações neutras (não são fotos) para produtos ainda sem foto cadastrada; o proprietário troca pelo painel.
+  const PH_SVG = {
+    pizza: '<path d="M6 14c10-6 26-6 36 0L24 42z"/><circle cx="20" cy="20" r="2.5"/><circle cx="28" cy="24" r="2.5"/><circle cx="23" cy="31" r="2"/>',
+    drink: '<path d="M14 8h20l-3 32H17z"/><path d="M15.5 18h17"/>',
+    dessert: '<path d="M6 36V22l36-8v22z"/><path d="M6 28l36-8"/>',
+    plate: '<circle cx="24" cy="26" r="14"/><circle cx="24" cy="26" r="8"/><path d="M5 8v9a3 3 0 0 0 3 3v14M43 8c-4 3-4 9 0 12v14"/>',
+  };
+  const phKind = c => /pizza/i.test(c.name) ? 'pizza' : /bebida|suco|cerveja|vinho/i.test(c.name) ? 'drink' : /sobremesa|doce/i.test(c.name) ? 'dessert' : 'plate';
+  const placeholder = (c, cls = 'ph') => { const d = h('span', { class: cls, role: 'img', 'aria-label': 'Foto ainda não cadastrada' }); d.innerHTML = `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PH_SVG[phKind(c)]}</svg>`; return d; };
+  const photo = (p, c, w, hgt) => p.image ? h('img', { src: p.image, alt: p.name, loading: 'lazy', width: w, height: hgt }) : placeholder(c);
+
+  async function menuPage() {
+    let data;
+    try { data = await api('/api/menu'); } catch (e) { $('#menu').replaceChildren(h('p', { class: 'alert' }, 'Não foi possível carregar o cardápio. ', h('a', { href: '' }, 'Tentar de novo'))); return; }
+    const open = data.status.open, cats = data.categories;
+    $('#halfrule').textContent = data.half_rule === 'highest' ? 'maior valor' : 'valor médio';
+    const byId = {}; cats.forEach(c => c.products.forEach(p => byId[p.id] = { p, c }));
+    const catById = Object.fromEntries(cats.map(c => [c.id, c]));
+    const rootOf = c => c.parent_id ? catById[c.parent_id] || c : c;
+    const kids = id => cats.filter(c => c.parent_id === id && c.products.length);
+    const roots = cats.filter(c => !c.parent_id && (c.products.length || kids(c.id).length));
+    const S = { root: roots[0] && roots[0].id, sub: null, q: '' };
+    const h0 = location.hash.match(/^#cat-(\d+)$/);
+    if (h0 && catById[+h0[1]]) { const c = catById[+h0[1]]; if (c.parent_id) { S.root = c.parent_id; S.sub = c.id; } else S.root = c.id; }
+    const tabs = $('#tabs'), sub = $('#subchips'), grid = $('#menu'), search = $('#msearch');
+
+    const minPrice = p => { const s = p.sizes.filter(x => x.available).map(x => x.price_cents); return s.length ? Math.min(...s) : p.price_cents; };
+    const visibleProducts = () => {
+      const r = catById[S.root]; if (!r) return [];
+      const list = S.sub ? catById[S.sub].products.map(p => [p, catById[S.sub]]) : [r, ...kids(r.id)].flatMap(c => c.products.map(p => [p, c]));
+      const q = S.q.trim().toLowerCase();
+      return q ? list.filter(([p]) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)) : list;
+    };
+    function card(p, c) {
+      const out = p.status === 'out' || (p.sizes.length && !p.sizes.some(s => s.available));
+      const pizza = c.is_pizza;
+      return h('button', { class: 'pc' + (out ? ' is-out' : ''), type: 'button', disabled: out || !open || null, onclick: () => pizza ? openPizza(p, c) : openSimple(p, c) },
+        h('span', { class: 'pc-img' }, photo(p, c, 480, 320), out ? h('span', { class: 'tag off' }, 'Em falta') : p.badge ? h('span', { class: 'tag' }, p.badge) : null),
+        h('span', { class: 'pc-body' }, h('h3', {}, p.name), p.description ? h('p', {}, p.description) : null,
+          h('span', { class: 'pc-foot' }, h('span', { class: 'pr' }, (p.sizes.length ? 'A partir de ' : '') + fmt(minPrice(p))), out ? null : h('span', { class: 'go' }, pizza ? 'Montar pizza' : 'Adicionar', ' ›'))));
+    }
+    function render() {
+      tabs.replaceChildren(...roots.map(c => h('button', { type: 'button', role: 'tab', 'aria-selected': S.root === c.id, onclick: () => { S.root = c.id; S.sub = null; S.q = ''; search.value = ''; history.replaceState(null, '', '#cat-' + c.id); render(); } }, c.name)));
+      const ks = kids(S.root);
+      sub.hidden = !ks.length;
+      sub.replaceChildren(...(ks.length ? [h('button', { type: 'button', class: S.sub ? '' : 'on', onclick: () => { S.sub = null; render(); } }, 'Todas'), ...ks.map(k => h('button', { type: 'button', class: S.sub === k.id ? 'on' : '', onclick: () => { S.sub = k.id; render(); } }, k.name))] : []));
+      const list = visibleProducts();
+      grid.replaceChildren(...(list.length ? [h('div', { class: 'pgrid' }, list.map(([p, c]) => card(p, c)))] : [h('p', { class: 'empty muted' }, S.q ? 'Nenhum item encontrado para essa busca.' : 'Nenhum item nesta categoria no momento.')]));
+    }
+    let st_; search.addEventListener('input', () => { clearTimeout(st_); st_ = setTimeout(() => { S.q = search.value; render(); }, 120); });
+    render();
+
+    // ---------- produto simples (entradas, bebidas, pratos…) ----------
+    const dlg = $('#prod-dialog'), form = $('#pd-form');
+    form.addEventListener('submit', e => e.preventDefault());
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+    function openSimple(p, c, edit) {
+      const st = edit ? { size: p.sizes.find(s => s.id === edit.size_id) || null, opts: new Set(edit.options), qty: edit.qty } : { size: p.sizes.find(s => s.available) || null, opts: new Set(), qty: 1 };
+      const optPrice = o => (st.size && o.size_prices[st.size.name] != null) ? o.size_prices[st.size.name] : o.price_cents;
+      const optOK = o => o.available && !(o.size_restricted && st.size && o.size_prices[st.size.name] == null);
+      const unit = () => (p.sizes.length && st.size ? st.size.price_cents : p.price_cents) + p.groups.reduce((a, g) => a + g.options.reduce((b, o) => b + (st.opts.has(o.id) && optOK(o) ? optPrice(o) : 0), 0), 0);
+      const err = h('p', { class: 'alert', role: 'alert', hidden: true }), total = h('span', {});
+      const render2 = () => {
+        const notes = h('input', { name: 'notes', maxlength: 200, placeholder: 'Ex.: sem cebola', 'aria-label': 'Observação', value: (form._notes && form._notes.value) || (edit && edit.notes) || '' });
+        form.replaceChildren(h('div', { class: 'pd' },
+          h('div', { class: 'sheet-head' }, h('h2', { id: 'pd-title' }, p.name), h('button', { class: 'x', type: 'button', 'aria-label': 'Fechar', onclick: () => dlg.close() }, '×')),
+          p.image ? h('img', { src: p.image, alt: p.name, width: 560, height: 220 }) : null, p.description ? h('p', { class: 'muted' }, p.description) : null,
+          p.sizes.length ? h('fieldset', {}, h('legend', {}, 'Tamanho'), p.sizes.map(s => h('label', { class: 'opt' }, h('input', { type: 'radio', name: 'size', checked: st.size?.id === s.id || null, disabled: !s.available || null, onchange: () => { st.size = s; render2(); } }),
+            h('span', {}, s.name, s.detail && h('small', {}, ' · ' + s.detail), !s.available && ' (em falta)'), h('b', {}, fmt(s.price_cents))))) : null,
+          ...p.groups.map(g => { const single = g.max === 1; return h('fieldset', {}, h('legend', {}, g.name + (g.min ? ' (obrigatório)' : ' (opcional)') + (g.max > 1 ? ` · até ${g.max}` : '')),
+            g.options.filter(o => o.available || true).map(o => h('label', { class: 'opt' }, h('input', { type: single ? 'radio' : 'checkbox', name: 'g' + g.id, checked: st.opts.has(o.id) || null, disabled: !optOK(o) || null,
+              onclick: e => { if (single) { const was = st.opts.has(o.id); g.options.forEach(x => st.opts.delete(x.id)); if (!(was && !g.min)) st.opts.add(o.id); else e.target.checked = false; } else if (e.target.checked) { if (g.options.filter(x => st.opts.has(x.id)).length >= g.max) { e.preventDefault(); toast(`Máximo de ${g.max} em ${g.name}`); return; } st.opts.add(o.id); } else st.opts.delete(o.id); upd(); } }),
+              h('span', {}, o.name, o.description ? h('small', {}, ' · ' + o.description) : null, !optOK(o) && ' (indisponível)'), optPrice(o) ? h('small', {}, '+ ' + fmt(optPrice(o))) : null))); }),
+          h('label', { class: 'f' }, 'Observação (opcional)', notes),
+          h('div', { class: 'row' }, h('span', { class: 'qty' }, h('button', { type: 'button', 'aria-label': 'Diminuir quantidade', onclick: () => { st.qty = Math.max(1, st.qty - 1); qv.textContent = st.qty; upd(); } }, '−'), qv, h('button', { type: 'button', 'aria-label': 'Aumentar quantidade', onclick: () => { st.qty = Math.min(50, st.qty + 1); qv.textContent = st.qty; upd(); } }, '+')), h('b', {}, total)),
+          err, h('button', { class: 'btn block', type: 'button', onclick: add }, edit ? 'Salvar alterações' : 'Adicionar à sacola')));
+        form._notes = notes; upd();
+      };
+      const qv = h('output', {}, String(st.qty)), upd = () => { total.textContent = fmt(unit() * st.qty); };
+      const add = () => {
+        const fail = m => { err.textContent = m; err.hidden = false; };
+        if (p.sizes.length && !st.size) return fail('Escolha o tamanho.');
+        for (const g of p.groups) { const n = g.options.filter(o => st.opts.has(o.id)).length; if (n < g.min) return fail(`Escolha ao menos ${g.min} em "${g.name}".`); }
+        const item = { product_id: p.id, name: p.name, size_id: st.size?.id || null, size_name: st.size?.name || null, flavors: [], removals: [], options: [...st.opts], optNames: p.groups.flatMap(g => g.options.filter(o => st.opts.has(o.id)).map(o => o.name)),
+          qty: st.qty, notes: (form._notes.value || '').trim(), unit: unit(), image: p.image, kind: 'simple' };
+        if (edit) Cart.replace(edit.index, item); else Cart.add(item);
+        dlg.close(); toast(edit ? 'Item atualizado' : 'Adicionado à sacola');
+      };
+      form._notes = null; render2(); dlg.showModal();
+    }
+
+    // ---------- montagem da pizza: tamanho → sabores → personalizar ----------
+    const pz = $('#pizza-dialog');
+    pz.addEventListener('click', e => { if (e.target === pz) pz.close(); });
+    function openPizza(initial, cat, edit) {
+      const root = rootOf(cat);
+      const pool = cats.filter(c => c.is_pizza && rootOf(c).id === root.id).flatMap(c => c.products.map(p => ({ p, c })));
+      const maxFl = cat.max_flavors || data.max_flavors || 2;
+      const st = edit ? { step: 3, size: edit.size, sel: [...edit.sel], rem: new Set(edit.rem), groups: Object.fromEntries(Object.entries(edit.groups).map(([k, v]) => [k, new Set(v)])), notes: edit.notes, qty: edit.qty, msg: '' }
+                      : { step: 1, size: null, sel: [initial.id], rem: new Set(), groups: {}, notes: '', qty: 1, msg: '' };
+      const P = id => byId[id].p;
+      const sz = (p, name) => p.sizes.find(s => s.name === name);
+      const sizeNames = () => P(initial.id).sizes;
+      const okAt = p => p.status === 'active' && st.size && sz(p, st.size) && sz(p, st.size).available;
+      const base = () => { const ps = st.sel.map(id => sz(P(id), st.size).price_cents); return ps.length === 1 ? ps[0] : data.half_rule === 'highest' ? Math.max(...ps) : Math.ceil(ps.reduce((a, b) => a + b, 0) / ps.length); };
+      const groups = () => { const seen = new Map(); st.sel.forEach(id => P(id).groups.forEach(g => seen.set(g.id, g))); return [...seen.values()]; };
+      const optPrice = o => (st.size && o.size_prices[st.size] != null) ? o.size_prices[st.size] : o.price_cents;
+      const optOK = o => o.available && !(o.size_restricted && o.size_prices[st.size] == null);
+      const gset = g => st.groups[g.id] || (st.groups[g.id] = new Set());
+      const unit = () => st.size && st.sel.length ? base() + groups().reduce((a, g) => a + g.options.reduce((b, o) => b + (gset(g).has(o.id) && optOK(o) ? optPrice(o) : 0), 0), 0) : 0;
+      const names = () => st.sel.map(id => P(id).name);
+      const title = () => st.step === 3 ? 'Personalize sua pizza' : 'Monte sua pizza';
+      const step = (n, text) => h('h3', { class: 'stp' }, h('span', { class: 'num', 'aria-hidden': 'true' }, String(n)), text);
+
+      const fill = (el, ...k) => el.replaceChildren(...k.flat().filter(x => x != null && x !== false)); // ignora null/false (condicionais)
+      const body = h('div', { class: 'pz-body' }), foot = h('div', { class: 'pz-foot' }), head = h('div', { class: 'pz-head' });
+      pz.replaceChildren(h('div', { class: 'pz-in' }, head, body, foot));
+
+      function draw() {
+        fill(head, h('button', { class: 'x', type: 'button', 'aria-label': st.step > 1 ? 'Voltar uma etapa' : 'Fechar', onclick: () => { if (st.step > 1) { st.step--; st.msg = ''; draw(); } else pz.close(); } }, st.step > 1 ? '‹' : '×'),
+          h('h2', { id: 'pz-title' }, title()), h('button', { class: 'x', type: 'button', 'aria-label': 'Fechar montagem', onclick: () => pz.close() }, '×'));
+        pz.setAttribute('aria-labelledby', 'pz-title');
+        if (st.step === 1) drawSize(); else if (st.step === 2) drawFlavors(); else drawCustom();
+        body.scrollTop = 0;
+        if (st.swapped) { body.classList.remove('pz-swap'); void body.offsetWidth; body.classList.add('pz-swap'); } st.swapped = true; // transição curta entre etapas
+      }
+      const msg = () => st.msg ? h('p', { class: 'alert', role: 'alert' }, st.msg) : null;
+
+      function drawSize() {
+        const sizes = sizeNames();
+        fill(body, step(1, 'Escolha o tamanho'), h('div', { class: 'sizes', role: 'radiogroup', 'aria-label': 'Tamanho' }, sizes.map(s => h('button', { type: 'button', role: 'radio', 'aria-checked': st.size === s.name, disabled: !s.available || null, class: 'sz' + (st.size === s.name ? ' on' : ''),
+          onclick: () => chooseSize(s.name) }, h('b', {}, s.name), s.detail ? h('small', {}, s.detail) : null, !s.available ? h('small', {}, 'em falta') : null))),
+          h('p', { class: 'muted small' }, `Pizza com 2 sabores: cobrança pelo ${data.half_rule === 'highest' ? 'maior valor' : 'valor médio'} dos sabores no tamanho escolhido.`), msg());
+        fill(foot, h('button', { class: 'btn block', type: 'button', disabled: !st.size || null, onclick: () => { st.step = 2; st.msg = ''; draw(); } }, 'Continuar ›'));
+      }
+      function chooseSize(name) {
+        st.size = name; st.msg = '';
+        const dropped = st.sel.filter(id => !okAt(P(id)));
+        if (dropped.length) { st.sel = st.sel.filter(id => !dropped.includes(id)); st.msg = `${dropped.map(id => P(id).name).join(', ')} não ${dropped.length > 1 ? 'estão' : 'está'} disponível no tamanho ${name} e ${dropped.length > 1 ? 'foram removidos' : 'foi removido'} da seleção. Escolha outro sabor.`; }
+        st.rem = new Set([...st.rem].filter(rid => st.sel.some(id => P(id).ingredients.some(i => i.id === rid))));
+        drawSize();
+      }
+      function drawFlavors() {
+        const full = st.sel.length >= maxFl;
+        fill(body, step(2, 'Escolha os sabores'), h('p', { class: 'muted small' }, `Obrigatório: escolha 1${maxFl > 1 ? ' ou ' + maxFl : ''} sabor${maxFl > 1 ? 'es' : ''}. ${maxFl > 1 ? 'Com 2 sabores, cada um ocupa uma metade.' : ''}`),
+          h('p', { class: 'counter' + (st.sel.length ? ' on' : ''), role: 'status' }, `${st.sel.length} de ${maxFl} selecionados`), msg(),
+          h('div', { class: 'flist' }, pool.map(({ p, c }) => {
+            const on = st.sel.includes(p.id), ok = okAt(p), s = st.size && sz(p, st.size);
+            return h('label', { class: 'fl' + (on ? ' on' : '') + (!ok ? ' off' : '') }, h('span', { class: 'fl-img' }, photo(p, c, 120, 80)),
+              h('span', { class: 'fl-t' }, h('b', {}, p.name), h('small', {}, !ok ? (p.status === 'out' ? 'Em falta' : 'Indisponível neste tamanho') : s ? fmt(s.price_cents) : '')),
+              h('input', { type: 'checkbox', checked: on || null, disabled: !ok || null, 'aria-label': p.name, onchange: e => {
+                if (e.target.checked) { if (st.sel.length >= maxFl) { e.target.checked = false; st.msg = `Máximo de ${maxFl} sabores. Desmarque um para trocar.`; drawFlavors(); return; } st.sel.push(p.id); }
+                else st.sel = st.sel.filter(id => id !== p.id);
+                st.msg = ''; st.rem = new Set([...st.rem].filter(rid => st.sel.some(id => P(id).ingredients.some(i => i.id === rid)))); drawFlavors(); } }));
+          })));
+        fill(foot, h('button', { class: 'btn block', type: 'button', disabled: !st.sel.length || null, onclick: () => { st.step = 3; st.msg = ''; draw(); } }, 'Continuar ›'));
+      }
+      function drawCustom() {
+        const sel = st.sel, multi = sel.length > 1, cat0 = cats.find(c => c.products.some(p => p.id === sel[0]));
+        const ing = [];
+        if (cat0 && cat0.allow_removals) sel.forEach(id => { const p = P(id), rm = p.ingredients.filter(i => i.removable); if (rm.length) ing.push(h('fieldset', { class: 'plain' }, h('legend', {}, 'Retirar ingredientes' + (multi ? ' · ' + p.name : '')),
+          rm.map(i => h('label', { class: 'opt' }, h('input', { type: 'checkbox', checked: st.rem.has(i.id) || null, onchange: e => { e.target.checked ? st.rem.add(i.id) : st.rem.delete(i.id); } }), h('span', {}, 'Sem ' + i.name))))); });
+        const gs = groups().map(g => {
+          const single = g.max === 1, set = gset(g), opts = g.options.filter(optOK);
+          return h('fieldset', { class: 'plain' }, h('legend', {}, g.name + (g.min ? ' (obrigatório)' : '') + (g.max > 1 ? ` · até ${g.max}` : '')),
+            single && !g.min ? h('label', { class: 'opt' }, h('input', { type: 'radio', name: 'g' + g.id, checked: set.size === 0 || null, onchange: () => { set.clear(); upd(); } }), h('span', {}, /^borda/i.test(g.name) ? 'Sem borda recheada' : 'Sem ' + g.name.toLowerCase())) : null,
+            opts.map(o => h('label', { class: 'opt' }, h('input', { type: single ? 'radio' : 'checkbox', name: 'g' + g.id, checked: set.has(o.id) || null,
+              onchange: e => { if (single) { set.clear(); set.add(o.id); } else if (e.target.checked) { if (set.size >= g.max) { e.target.checked = false; toast(`Máximo de ${g.max} em ${g.name}`); return; } set.add(o.id); } else set.delete(o.id); upd(); } }),
+              h('span', {}, o.name, o.description ? h('small', { class: 'muted' }, ' · ' + o.description) : null), optPrice(o) ? h('b', { class: 'add' }, '+ ' + fmt(optPrice(o))) : h('small', { class: 'muted' }, 'sem acréscimo'))));
+        });
+        const notes = h('textarea', { rows: 3, maxlength: 200, placeholder: 'Ex.: ponto da massa, observações gerais…', 'aria-label': 'Observações gerais', oninput: e => { st.notes = e.target.value; } }); notes.value = st.notes;
+        const qv = h('output', {}, String(st.qty)), total = h('b', {});
+        const upd = () => { total.textContent = fmt(unit() * st.qty); };
+        const err = h('p', { class: 'alert', role: 'alert', hidden: true });
+        fill(body, h('p', { class: 'chosen' }, icon_pizza(), `${st.size} · ${names().join(' + ')}`), msg(), ...ing, ...gs,
+          ing.length ? h('p', { class: 'muted small' }, 'Retirar um ingrediente não garante a ausência dele em traços nem de alérgenos (contaminação cruzada). Em caso de alergia, avise a loja.') : null,
+          h('fieldset', { class: 'plain' }, h('legend', {}, 'Observações'), notes), err);
+        fill(foot, h('div', { class: 'row pz-qty' }, h('span', { class: 'qty' }, h('button', { type: 'button', 'aria-label': 'Diminuir quantidade', onclick: () => { st.qty = Math.max(1, st.qty - 1); qv.textContent = st.qty; upd(); } }, '−'), qv,
+          h('button', { type: 'button', 'aria-label': 'Aumentar quantidade', onclick: () => { st.qty = Math.min(50, st.qty + 1); qv.textContent = st.qty; upd(); } }, '+')), total),
+          h('button', { class: 'btn block', type: 'button', onclick: () => finish(err) }, icon_cart(), edit ? 'Salvar alterações' : 'Adicionar ao carrinho'));
+        upd();
+      }
+      const icon_pizza = () => { const s = placeholder({ name: 'Pizza' }, 'mini'); return s; };
+      const icon_cart = () => { const s = h('span', { class: 'mini', 'aria-hidden': 'true' }); s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M3 4h3l2.5 11h10L21 8H7"/></svg>'; return s; };
+      function finish(err) {
+        const fail = m => { err.textContent = m; err.hidden = false; err.scrollIntoView({ block: 'center' }); };
+        for (const g of groups()) if (gset(g).size < g.min) return fail(`Escolha ao menos ${g.min} em "${g.name}".`);
+        const main = P(st.sel[0]), opts = groups().flatMap(g => g.options.filter(o => gset(g).has(o.id) && optOK(o)));
+        const remNames = [...st.rem].map(rid => { for (const id of st.sel) { const i = P(id).ingredients.find(x => x.id === rid); if (i) return `sem ${i.name}` + (st.sel.length > 1 ? ` — ½ ${P(id).name}` : ''); } return null; }).filter(Boolean);
+        const item = { product_id: main.id, name: st.sel.length > 1 ? names().map(n => '½ ' + n).join(' + ') : main.name, size_id: sz(main, st.size).id, size_name: st.size, flavors: st.sel.length > 1 ? [...st.sel] : [],
+          options: opts.map(o => o.id), removals: [...st.rem], optNames: [...opts.map(o => o.name), ...remNames], qty: st.qty, notes: st.notes.trim(), unit: unit(), image: main.image, kind: 'pizza',
+          edit: { sel: [...st.sel], size: st.size, rem: [...st.rem], groups: Object.fromEntries(Object.entries(st.groups).map(([k, v]) => [k, [...v]])), notes: st.notes, catId: cat.id } };
+        if (edit) Cart.replace(edit.index, item); else Cart.add(item);
+        pz.close(); toast(edit ? 'Pizza atualizada' : 'Pizza adicionada ao carrinho');
+      }
+      draw(); pz.showModal();
+    }
+    window.__editCartItem = (i) => { // chamado pelo botão "Editar" da sacola
+      const x = Cart.get()[i]; if (!x) return;
+      if (x.kind === 'pizza' && x.edit) { const c = catById[x.edit.catId]; if (c) { $('#cart-dialog').close(); openPizza(byId[x.product_id].p, c, { ...x.edit, qty: x.qty, index: i }); } }
+      else if (byId[x.product_id]) { $('#cart-dialog').close(); openSimple(byId[x.product_id].p, byId[x.product_id].c, { size_id: x.size_id, options: x.options, qty: x.qty, notes: x.notes, index: i }); }
+    };
+    cartUI(open);
+  }
+
+  function cartUI(open) {
+    const bar = $('#cartbar'), dlg = $('#cart-dialog');
+    const draw = () => {
+      const n = Cart.count(); bar.hidden = n === 0;
+      if (draw.prev !== undefined && n > draw.prev) { const c = $('#cart-count'); c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } draw.prev = n; // confirmação discreta ao adicionar
+      $('#cart-count').textContent = n; $('#cart-total').textContent = fmt(Cart.estimate());
+      $('#cart-sub').textContent = fmt(Cart.estimate());
+      const lines = $('#cart-lines'); const c = Cart.get();
+      lines.replaceChildren(...(c.length ? c.map((x, i) => h('div', { class: 'line' },
+        h('div', { class: 'row' }, h('b', {}, `${x.name}${x.size_name ? ' (' + x.size_name + ')' : ''}`), h('span', {}, fmt(x.unit * x.qty))),
+        x.optNames?.length ? h('small', {}, x.optNames.join(', ')) : null, x.notes ? h('small', {}, 'Obs.: ' + x.notes) : null,
+        h('div', { class: 'row' }, h('span', { class: 'qty' }, h('button', { type: 'button', 'aria-label': 'Diminuir ' + x.name, onclick: () => Cart.setQty(i, x.qty - 1) }, '−'), h('output', {}, String(x.qty)),
+          h('button', { type: 'button', 'aria-label': 'Aumentar ' + x.name, onclick: () => Cart.setQty(i, x.qty + 1) }, '+')), h('span', { class: 'acts' }, h('button', { class: 'lnk ed', type: 'button', 'aria-label': 'Editar ' + x.name, onclick: () => window.__editCartItem && window.__editCartItem(i) }, 'Editar'), h('button', { class: 'lnk', type: 'button', 'aria-label': 'Remover ' + x.name, onclick: () => Cart.setQty(i, 0) }, 'Remover')))))
+        : [h('p', { class: 'empty muted' }, 'Sua sacola está vazia.')]));
+      $('#go-checkout').hidden = !c.length;
+      if (!c.length && dlg.open) dlg.close();
+    };
+    document.addEventListener('cart', draw); draw();
+    $('#open-cart').addEventListener('click', () => dlg.showModal());
+    $$('[data-close]', dlg).forEach(b => b.addEventListener('click', () => dlg.close()));
+    dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  }
+
+  // ---------- checkout ----------
+  function checkoutPage() {
+    const form = $('#co-form'), empty = $('#empty');
+    if (!Cart.count()) { empty.hidden = false; return; }
+    form.hidden = false;
+    const q = n => form.elements[n];
+    const type = () => form.elements.type.value;
+    let quote = null, quoting = 0;
+    const sync = () => {
+      const del = type() === 'delivery'; $('#addr').hidden = !del;
+      const pay = form.elements.payment?.value || (form.querySelector('input[name=payment]:checked') || {}).value;
+      $('#change').hidden = pay !== 'cash'; const pn = $('#pix-note'); if (pn) pn.hidden = pay !== 'pix';
+    };
+    let changed = [];
+    $('#price-ack').addEventListener('change', e => { if (e.target.checked) Cart.set(Cart.get().map((c, i) => { const l = quote && quote.lines[i]; return l ? { ...c, unit: l.unit_price_cents } : c; })); });
+    const summary = async () => {
+      const mine = ++quoting;
+      try {
+        const r = await api('/api/quote', { method: 'POST', body: JSON.stringify({ items: Cart.payload(), type: type(), zone_id: q('zone_id').value || null }) });
+        if (mine !== quoting) return; quote = r;
+        // preço mudou desde que o item foi para a sacola? mostra e exige ciência antes de enviar
+        const cart = Cart.get(); changed = r.lines.map((l, i) => ({ l, c: cart[i] })).filter(({ l, c }) => c && c.unit !== l.unit_price_cents);
+        const note = $('#price-note'); note.hidden = !changed.length;
+        if (changed.length) { $('#price-list').replaceChildren(...changed.map(({ l, c }) => h('li', {}, `${l.name}${l.size_name ? ' (' + l.size_name + ')' : ''}: ${fmt(c.unit)} → ${fmt(l.unit_price_cents)} cada`))); }
+        const rows = r.lines.map(l => h('div', { class: 'row' }, h('span', {}, `${l.qty}× ${l.name}${l.size_name ? ' (' + l.size_name + ')' : ''}`), h('span', {}, fmt(l.total_cents))));
+        $('#summary').replaceChildren(...rows, h('div', { class: 'row' }, h('span', {}, 'Subtotal'), h('span', {}, fmt(r.subtotal_cents))),
+          type() === 'delivery' ? h('div', { class: 'row' }, h('span', {}, 'Taxa de entrega'), h('span', {}, q('zone_id').value ? fmt(r.delivery_fee_cents) : 'escolha o bairro')) : null,
+          h('div', { class: 'row total' }, h('span', {}, 'Total'), h('b', {}, fmt(r.total_cents))));
+      } catch (e) {
+        $('#summary').replaceChildren(h('p', { class: 'alert' }, e.message + ' ', h('a', { href: '/cardapio' }, 'Voltar ao cardápio para ajustar a sacola.')));
+        if (e.status === 422) { quote = null; }
+      }
+    };
+    form.addEventListener('change', () => { sync(); summary(); }); sync(); summary();
+    const showErr = m => { const e = $('#form-error'); e.textContent = m; e.hidden = !m; if (m) e.scrollIntoView({ block: 'center' }); };
+    form.addEventListener('submit', async ev => {
+      ev.preventDefault(); showErr('');
+      const btn = $('#submit'); if (btn.disabled) return;
+      const body = { type: type(), name: q('name').value.trim(), phone: q('phone').value.trim(), zone_id: q('zone_id').value || null, street: q('street').value.trim(), number: q('number').value.trim(),
+        complement: q('complement').value.trim(), reference: q('reference').value.trim(), payment: (form.querySelector('input[name=payment]:checked') || {}).value, change_for: q('change_for').value.trim(),
+        notes: q('notes').value.trim(), items: Cart.payload() };
+      if (body.name.length < 2) return showErr('Informe seu nome.');
+      if (body.phone.replace(/\D/g, '').length < 10) return showErr('Informe o telefone com DDD.');
+      if (body.type === 'delivery' && (!body.zone_id || !body.street || !body.number)) return showErr('Informe bairro, rua e número para a entrega.');
+      if (!body.payment) return showErr('Escolha a forma de pagamento.');
+      if (changed.length && !$('#price-ack').checked) return showErr('Alguns preços mudaram desde que você adicionou ao carrinho. Confira o aviso e marque "Estou ciente" para continuar.');
+      if (quote && quote.min_order_cents > quote.subtotal_cents && body.type === 'delivery') return showErr('Pedido mínimo para este bairro: ' + fmt(quote.min_order_cents));
+      // chave de idempotência estável por conteúdo: cliques repetidos ou reenvio após falha de rede reaproveitam o mesmo pedido
+      const sig = JSON.stringify(body); let st; try { st = JSON.parse(localStorage.getItem('bianca_idem')); } catch { st = null; }
+      if (!st || st.sig !== sig) { st = { sig, key: (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2)).replace(/[^A-Za-z0-9_-]/g, '') + 'xx'.repeat(4) }; try { localStorage.setItem('bianca_idem', JSON.stringify(st)); } catch { /* ok */ } }
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      try {
+        const r = await api('/api/orders', { method: 'POST', headers: { 'Idempotency-Key': st.key }, body: JSON.stringify(body) });
+        try { localStorage.removeItem('bianca_idem'); } catch { /* ok */ }
+        Cart.clear(); location.href = '/pedido/' + r.token;
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'Enviar pedido';
+        showErr(e.status ? e.message : 'Sem conexão. Seu pedido NÃO foi perdido: toque em "Enviar pedido" novamente — não haverá duplicidade.');
+      }
+    });
+  }
+
+  // ---------- acompanhamento ----------
+  function trackPage() {
+    const token = $('#track').dataset.token, body = $('#t-body');
+    const flow = ['received', 'accepted', 'preparing', 'ready', 'completed'];
+    let fails = 0;
+    const draw = o => {
+      $('#t-title').textContent = `Pedido #${o.id}`;
+      const lbl = { received: 'Recebido', accepted: 'Aceito', preparing: 'Em preparo', ready: o.type === 'delivery' ? 'Saiu para entrega' : 'Pronto para retirada', completed: 'Concluído' };
+      const cur = flow.indexOf(o.status);
+      const head = o.status === 'received' ? 'Recebemos seu pedido! Ele ainda não foi aceito pela loja — avisaremos aqui.' : o.status === 'cancelled' ? 'Pedido cancelado' + (o.cancel_reason ? ': ' + o.cancel_reason : '') : lbl[o.status];
+      fill(body, 
+        h('div', { class: 'bigstatus', role: 'status' }, h('b', {}, o.status_label), h('span', {}, head), o.estimate_minutes && o.status !== 'completed' && o.status !== 'cancelled' ? h('span', { class: 'muted' }, ` Estimativa: cerca de ${o.estimate_minutes} min.`) : null),
+        o.status === 'cancelled' ? null : h('ol', { class: 'steps' }, flow.map((s, i) => h('li', { class: i < cur || o.status === 'completed' ? 'done' : i === cur ? 'now' : '' }, lbl[s]))),
+        h('h2', { class: 'h-sm' }, 'Itens'), ...o.items.map(i => h('div', { class: 'line' }, h('div', { class: 'row' }, h('span', {}, `${i.qty}× ${i.name}${i.size_name ? ' (' + i.size_name + ')' : ''}`), h('span', {}, fmt(i.total_cents))),
+          i.options.length ? h('small', {}, i.options.join(', ')) : null, i.notes ? h('small', {}, 'Obs.: ' + i.notes) : null)),
+        h('div', { class: 'row' }, h('span', {}, 'Taxa de entrega'), h('span', {}, fmt(o.delivery_fee_cents))),
+        h('div', { class: 'row' }, h('b', {}, 'Total'), h('b', {}, fmt(o.total_cents))),
+        h('p', { class: 'muted' }, `Pagamento: ${o.payment_label} — ${o.payment_status_label}. A confirmação é feita pela equipe.`),
+        fails ? h('p', { class: 'alert' }, 'Sem conexão — as informações podem estar desatualizadas.') : null);
+    };
+    const tick = async () => {
+      try { const o = await api('/api/pedido/' + token); fails = 0; draw(o); if (['completed', 'cancelled'].includes(o.status)) return; }
+      catch { fails++; if (fails === 1 && !body.querySelector('.bigstatus')) fill(body, h('p', { class: 'alert' }, 'Não foi possível carregar. Tentando novamente…')); }
+      setTimeout(tick, document.hidden ? 20000 : 8000);
+    };
+    tick();
+  }
+
+  if (page === 'menu') menuPage(); else if (page === 'checkout') checkoutPage(); else if (page === 'track') trackPage();
+})();

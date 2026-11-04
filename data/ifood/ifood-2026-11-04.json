@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "source": "ifood",
+    "channel": "iFood (delivery, Contagem-MG, Centro)",
+    "source_url": "https://www.ifood.com.br/delivery/contagem-mg/pizzaria-bianca---desde-1977-centro/77cf5197-6984-4adb-acd7-2d4110063b3d",
+    "store_id": "77cf5197-6984-4adb-acd7-2d4110063b3d",
+    "consulted_at": "2026-11-04",
+    "access": "Página pública aberta no navegador do próprio usuário (verificação anti-bot concluída por ele). Sem login, sem endereço informado, sem endpoints privados.",
+    "store_status_at_consult": "Loja fechada (abre às 18:00): cartões marcados 'Fechado'; opções ainda abriam. Indisponibilidade do momento NÃO implica desativação no site.",
+    "price_note": "Preços são os exibidos no iFood (canal próprio, geralmente acima do cardápio do site). O iFood usa preço-base R$ 0,01 + opções; o total de um sabor é o valor exibido + R$ 0,01 (confirmado: 'A partir de' = menor sabor + 0,01).",
+    "image_base": "https://static.ifood-static.com.br/image/upload/pratos/77cf5197-6984-4adb-acd7-2d4110063b3d/",
+    "not_accessible": [
+      "Taxa de entrega, tempo, promoções por endereço (não foi informado endereço).",
+      "Avaliações/selos/benefícios da plataforma (deliberadamente não copiados).",
+      "Mais de uma 'janela' de sabor foi vista em Gigante/Grande/Média/Brotinho; 'Brotinho 2 sabores' não existe no iFood (só 1 sabor)."
+    ]
+  },
+  "pizza_rules_ifood": {
+    "one_flavor_card": "Escolha exatamente 1 sabor (obrigatório) + borda (obrigatória: Catupiry ou sem borda) + bebidas opcionais (upsell do iFood).",
+    "two_flavors_card": "Cada sabor tem seletor de quantidade e é cotado pela METADE do preço do sabor inteiro (soma das metades). Limite de seleção exato não foi lido; o site mantém 1 a 2 sabores.",
+    "divergence": "No iFood 1 e 2 sabores são cartões separados; no site é uma montagem única (1–2 sabores). Regra de preço do site: valor médio (PDF), mantida.",
+    "borda": {"Gigante": 26.90, "Grande": 24.90, "Média": 21.90, "Brotinho": 19.90, "nome": "Borda de Catupiry Original", "unica_opcao_encontrada": true},
+    "sizes": {"Gigante": "35 cm · 8 fatias", "Grande": "30 cm · 6 fatias", "Média": "25 cm · 4 fatias", "Brotinho": "20 cm · 2 fatias"}
+  },
+  "pizza_flavors": [
+    {"name": "À Moda", "img": "202403011546_418I_i.jpg", "p": [154.89, 134.89, 99.89, 74.89]},
+    {"name": "À Moda Especial", "img": "202403011547_K246_i.jpg", "p": [159.89, 149.89, 104.89, 79.89]},
+    {"name": "Aliche Nacional", "img": "202403011548_48EG_i.jpg", "p": [169.89, 164.89, 119.89, 89.89]},
+    {"name": "Atum", "img": "202403011549_T8X6_i.jpg", "p": [164.89, 144.89, 99.89, 81.89]},
+    {"name": "Audácia", "img": "202403201748_MC2I_i.jpg", "p": [164.89, 154.89, 112.89, 84.89]},
+    {"name": "Calabresa", "img": "202403011714_8E4E_i.jpg", "p": [139.89, 124.89, 87.89, 68.89]},
+    {"name": "Carne Seca com Catupiry", "img": "202403011716_NIU0_i.jpg", "p": [164.89, 154.89, 119.89, 87.89]},
+    {"name": "Frango à Bolonhesa", "img": "202403011727_60XY_i.jpg", "p": [154.89, 134.89, 99.89, 74.89]},
+    {"name": "Frango com Catupiry", "img": "202403011730_FS1T_i.jpg", "p": [159.89, 149.89, 112.89, 81.89]},
+    {"name": "Lombinho com Champignon e Tomate", "img": "202403011718_P200_i.jpg", "p": [144.89, 129.89, 94.89, 74.89]},
+    {"name": "Lombinho com Catupiry e Milho", "img": "202403011721_KC50_i.jpg", "p": [159.89, 149.89, 99.89, 81.89]},
+    {"name": "Margherita", "img": "202403011722_F86H_i.jpg", "p": [124.89, 112.89, 84.89, 64.89]},
+    {"name": "Mussarela", "img": "202403011723_7H16_i.jpg", "p": [124.89, 112.89, 84.89, 64.89]},
+    {"name": "Palmito à Bolonhesa", "img": "202403011725_H03H_i.jpg", "p": [152.89, 134.89, 104.89, 81.89]},
+    {"name": "Portuguesa", "img": "202403011732_46F4_i.jpg", "p": [164.89, 139.89, 119.89, 87.89]},
+    {"name": "Presunto", "img": "202403011733_U27H_i.jpg", "p": [124.89, 112.89, 84.89, 64.89]},
+    {"name": "Presunto com Catupiry", "img": "202403011733_5451_i.jpg", "p": [149.89, 134.89, 99.89, 74.89]},
+    {"name": "Presunto, Tomate, Bacon e Milho", "img": "202403011734_7HOY_i.jpg", "p": [154.89, 134.89, 99.89, 74.89]},
+    {"name": "Quatro Queijos", "img": "202403011734_YOT3_i.jpg", "p": [164.89, 154.89, 112.89, 87.89]},
+    {"name": "Salaminho", "img": "202403011735_3V53_i.jpg", "p": [149.89, 144.89, 109.89, 68.89]},
+    {"name": "Tropical", "img": "202403011758_0Q87_i.jpg", "p": [169.89, 149.89, 118.90, 87.89], "note": "Média exibida como +118,90 (demais sabores terminam em ,89): possível digitação no iFood; não adotar sem conferir."},
+    {"name": "Vegetariana", "img": "202403011736_16V7_i.jpg", "p": [144.89, 134.89, 94.90, 74.89], "note": "Média exibida como +94,90 (demais terminam em ,89): idem."}
+  ],
+  "pizza_flavor_columns": ["Gigante", "Grande", "Média", "Brotinho"],
+  "not_on_ifood": ["Lombo Defumado (existe no PDF/site; ausência no iFood não prova que deixou de existir)"],
+  "dishes": [
+    {"name": "Filé à Bianca Especial", "p": 81.90, "m_add": 65.00, "g_add": 153.00, "img": "202402271633_YUJ4_i.jpg"},
+    {"name": "Filé à Francesa", "p": 81.90, "m_add": 68.00, "g_add": 147.00, "img": "202402271635_4DM5_i.jpg"},
+    {"name": "Filé ao Molho Madeira", "p": 74.90, "m_add": 69.00, "g_add": 147.00, "size1_label": "Individual"},
+    {"name": "Filé Mignon à Parmegiana", "p": 93.90, "m_add": 88.00, "g_add": 176.00, "img": "202609182311_53NR_i.jpg", "img_note": "foto do cartão 'Parmegiana de Filé Mignon (P) - Individual' (Seleções), mesmo prato", "extra_group": "Filé mignon: Empanado ou Grelhado (obrigatório, sem acréscimo)"},
+    {"name": "Filé na Manteiga", "p": 68.90, "m_add": 56.00, "g_add": 144.00},
+    {"name": "Medalhão à Piamontese", "p": 99.90, "m_add": 82.00, "g_add": 175.00},
+    {"name": "Filé de Frango à Parmegiana", "p": 69.90, "m_add": 55.00, "g_add": 118.00, "img": "202512111550_35U2_i.jpg", "img_note": "foto do cartão 'Parmegiana de Frango (P) - Individual' (Seleções), mesmo prato"},
+    {"name": "Peito de Frango Grelhado", "p": 44.90, "m_add": 43.00, "g_add": 80.00},
+    {"name": "Filé de Tilápia Empanado - Prato", "p": 62.90, "m_add": 50.00, "g_add": 87.00},
+    {"name": "Filé de Tilápia a Parmegiana", "p": 74.90, "m_add": 63.00, "g_add": 138.00}
+  ],
+  "dishes_note": "P = preço do cartão; M e G = acréscimo sobre P (+R$ exibido). Descrição do tamanho: P 1 pessoa, M 2 pessoas, G 3 pessoas. Gramagens do PDF (150/250/500 g) não aparecem no iFood.",
+  "massas": [
+    {"name": "Lasanha à Bolonhesa", "p": 119.90, "serve": 3, "option": "Cobertura Catupiry Original +19,90 (ou Tradicional)", "note": "iFood: serve 3 pessoas. O site não informa a porção (R$ 59,90): diferença de ~100% provavelmente reflete porção diferente; confirmar antes de comparar."},
+    {"name": "Canelone", "p": 124.90, "serve": 3, "option": "Cobertura Catupiry Original +19,90 (ou Tradicional)", "note": "iFood: serve 3 pessoas, 6 massas. O site não informa a porção (R$ 64,90): confirmar antes de comparar."}
+  ],
+  "porcoes": [
+    {"name": "Batata Frita - 500g", "p": 44.90, "options": ["Adicionar mussarela +14,00", "Adicionar mussarela e bacon +19,00"]},
+    {"name": "Batata Frita com Mussarela - 500g", "p": 58.90, "img": "202405282040_65Q5_i.jpg"},
+    {"name": "Bolinho de Bacalhau do Porto (15 unidades)", "p": 79.90},
+    {"name": "Filé de Tilápia Empanado - Porção de 500g", "p": 94.90},
+    {"name": "Pastel de Angu com Carne Seca e Requeijão (10 unidades)", "p": 56.90},
+    {"name": "Pastel de Aipim com Carne Moída (10 unidades)", "p": 56.90},
+    {"name": "Filé Mignon com Fritas - 650g", "p": 124.90, "note": "iFood também exibe, em outra janela, 'Filé Mignon com Fritas - 500g' R$ 74,90 (250 g de filé): composição diferente, não equivale ao item de 650 g."},
+    {"name": "Filé de Frango com Fritas - 650g", "p": 62.90, "note": "Há também 'Filé de Frango com Fritas - 500g' R$ 49,90 em outra janela."}
+  ],
+  "sobremesas": [
+    {"name": "Pudim Artesanal - Individual", "p": 19.90, "de": 24.90, "img": "202407242044_8X7J_i.jpg", "note": "preço promocional exibido (de 24,90)"},
+    {"name": "Torta Holandesa - Individual", "p": 29.90, "de": 34.90, "img": "202512111414_4MBK_i.jpg", "note": "preço promocional exibido (de 34,90); sobremesa de parceira 'Tia Eliana'"}
+  ],
+  "bebidas": [
+    {"name": "Água Mineral Com Gás São Lourenço 510ml", "p": 8.90},
+    {"name": "Água Mineral Sem Gás São Lourenço 510ml", "p": 8.90},
+    {"name": "Água Tônica Antarctica Lata 350ml", "p": 8.90},
+    {"name": "Coca-Cola Lata 350ml", "p": 8.90},
+    {"name": "Coca-Cola Sem Açúcar 350ml", "p": 8.90},
+    {"name": "Coca-Cola Zero Garrafa 2l", "p": 19.90},
+    {"name": "Fanta Laranja Lata 350ml", "p": 8.90},
+    {"name": "Refr Guaraná Antarctica Zero 2l", "p": 19.90},
+    {"name": "Refrigerante Coca-Cola Original 2l", "p": 19.90},
+    {"name": "Refrigerante Guaraná Antarctica 2l", "p": 19.90},
+    {"name": "Refrigerante Guaraná Antarctica Lata 350ml", "p": 8.90},
+    {"name": "Refrigerante Guaraná Antarctica sem Açúcar Lata 350ml", "p": 8.90},
+    {"name": "Refrigerante Limoneto H2oh 500ml", "p": 9.90},
+    {"name": "Suco Del Valle Lata - Pêssego 290ml", "p": 9.90}
+  ],
+  "combos_ifood_only": [
+    {"name": "Pizza de Frango com Catupiry (Grande) + 2 Coca-Cola Lata", "p": 159.90, "de": 167.70},
+    {"name": "Pizza de Calabresa (Gigante) + Coca-Cola 2 Litros", "p": 144.90, "de": 159.80},
+    {"name": "Pizza À Moda (Grande) + Coca-Cola 2 Litros", "p": 149.90, "de": 154.80},
+    {"name": "Pizza de Calabresa (Grande) — promoção", "p": 99.90, "de": 124.90},
+    {"name": "Parmegiana de Frango M (2 pessoas) + 2 Coca-Cola Lata", "p": 134.90, "de": 142.70},
+    {"name": "Parmegiana de Filé Mignon M (2 pessoas) + 2 Coca-Cola Lata", "p": 189.90, "de": 199.70},
+    {"name": "Parmegiana de Frango (P) - Individual — promoção", "p": 59.90, "de": 69.90},
+    {"name": "Parmegiana de Filé Mignon (P) - Individual — promoção", "p": 89.90, "de": 93.90}
+  ],
+  "combos_note": "Combos e '% Off' são promoções do canal; NÃO foram importados. Preço próprio e componentes dependem de decisão comercial."
+}

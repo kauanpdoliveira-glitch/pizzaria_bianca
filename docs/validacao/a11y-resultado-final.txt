@@ -1,0 +1,73 @@
+OK     público/                           1440
+OK     público/historia                   1440
+OK     público/cardapio                   1440
+OK     público/checkout                   1440
+OK     público/equipe                     1440
+OK     público/equipe/recuperar           1440
+OK     público/pedido/92a61e0e77ab9e8e03682d6e20b48f9e1440
+OK     público/                           1024
+OK     público/historia                   1024
+OK     público/cardapio                   1024
+OK     público/checkout                   1024
+OK     público/equipe                     1024
+OK     público/equipe/recuperar           1024
+OK     público/pedido/92a61e0e77ab9e8e03682d6e20b48f9e1024
+OK     público/                           768
+OK     público/historia                   768
+OK     público/cardapio                   768
+OK     público/checkout                   768
+OK     público/equipe                     768
+OK     público/equipe/recuperar           768
+OK     público/pedido/92a61e0e77ab9e8e03682d6e20b48f9e768
+OK     público/                           390
+OK     público/historia                   390
+OK     público/cardapio                   390
+OK     público/checkout                   390
+OK     público/equipe                     390
+OK     público/equipe/recuperar           390
+OK     público/pedido/92a61e0e77ab9e8e03682d6e20b48f9e390
+OK     público/                           360
+OK     público/historia                   360
+OK     público/cardapio                   360
+OK     público/checkout                   360
+OK     público/equipe                     360
+OK     público/equipe/recuperar           360
+OK     público/pedido/92a61e0e77ab9e8e03682d6e20b48f9e360
+login owner -> /admin
+OK     dono    /admin                      1440
+OK     dono    /admin/pedidos              1440
+OK     dono    /admin/cardapio             1440
+OK     dono    /admin/cardapio/produto/13  1440
+OK     dono    /admin/cardapio/grupos/1    1440
+OK     dono    /admin/salao                1440
+OK     dono    /admin/caixa                1440
+OK     dono    /admin/clientes             1440
+OK     dono    /admin/relatorios           1440
+OK     dono    /admin/executivo            1440
+OK     dono    /admin/config               1440
+OK     dono    /admin/usuarios             1440
+OK     dono    /admin/acessos              1440
+OK     dono    /admin/impressao            1440
+OK     dono    /garcom                     1440
+OK     dono    /admin                      390
+OK     dono    /admin/cardapio             390
+OK     dono    /admin/salao                390
+OK     dono    /admin/caixa                390
+OK     dono    /admin/usuarios             390
+OK     dono    /admin                      768
+OK     dono    /admin/cardapio             768
+OK     dono    /admin/salao                768
+OK     dono    /admin/caixa                768
+OK     dono    /admin/usuarios             768
+login manager -> /admin
+OK     gerente /admin                      1440
+OK     gerente /admin/caixa                1440
+OK     gerente /admin/salao                1440
+OK     gerente /admin/cardapio             1440
+OK     gerente /admin/caixa                390
+login waiter -> /garcom
+OK     garçom /garcom                     1440
+OK     garçom /garcom                     768
+OK     garçom /garcom                     390
+OK     garçom /garcom                     360
+FIM

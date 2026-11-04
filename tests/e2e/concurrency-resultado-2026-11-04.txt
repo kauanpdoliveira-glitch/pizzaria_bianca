@@ -1,0 +1,12 @@
+APROVADO S1 mesa livre aberta por 2 garçons ao mesmo tempo: 1 vence, o outro recebe 409 (escolha explícita)  [["ok",409] travado=0]
+APROVADO S2 mesmo nº de comanda física em 2 mesas simultâneas: só 1 abre, outro 409  [[409,"ok"]]
+APROVADO S3 6 envios simultâneos com a mesma chave: 1 comanda só e TODOS recebem a mesma resposta (sem 409 espúrio)  [ok=6 erros=[]]
+APROVADO S3c checkout: 6 envios simultâneos com a mesma chave = 1 pedido, todos recebem o mesmo número  [ok=6 erros=[]]
+APROVADO S4 dois gerentes aceitam o mesmo pedido (mesma versão): 1 grava, o outro recebe 409  [["ok",409]]
+APROVADO S5 "preparo" x "cancelar" simultâneos: exatamente 1 vence e o estado final é coerente  [final=preparing ["ok",409]]
+APROVADO S3b 6 envios simultâneos da MESMA rodada (mesma chave): 1 pedido de produção só, todos recebem a mesma resposta  [ok=6 erros=[]]
+APROVADO S6 dois caixas registram o pagamento TOTAL ao mesmo tempo: o sistema não deve aceitar recebimento acima da conta  [total=19980 confirmado=19980 respostas=[422,"ok"]]
+APROVADO S6b fechamento simultâneo da mesma comanda: termina fechada, sem erro de banco  [["ok","ok"]]
+APROVADO S7 fechar o antigo e abrir o novo ao mesmo tempo: antigo fecha, novo fica ativo e a mesa continua ocupada  [["ok","ok"]]
+
+Total: 10 aprovados, 0 falharam

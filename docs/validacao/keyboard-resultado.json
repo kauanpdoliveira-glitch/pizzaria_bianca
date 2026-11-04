@@ -1,0 +1,82 @@
+[
+    {
+        "teste": "Tab na landing (16 paradas)",
+        "sem_indicador_de_foco": [],
+        "coberto_pelo_cabecalho": [
+            "A.skip \"Pular para o con\""
+        ],
+        "primeiras": [
+            "A.skip \"Pular para o con\"",
+            "A.brand",
+            "A. \"Início\"",
+            "A. \"Cardápio\"",
+            "A. \"Nossa história\"",
+            "A. \"Contato\""
+        ]
+    },
+    {
+        "teste": "foco por teclado em item do rodapé (pré-escondido) revela e fica visível",
+        "resultado": {
+            "opacity": "1",
+            "preClass": true,
+            "inView": true,
+            "notUnderHeader": true
+        }
+    },
+    {
+        "teste": "menu móvel: Enter abre, Esc fecha, foco volta ao botão",
+        "abriu": true,
+        "fechou": true,
+        "foco_no_botao": true
+    },
+    {
+        "teste": "montagem da pizza: Enter abre, foco entra, Esc fecha, foco volta ao cartão",
+        "abriu": true,
+        "foco_dentro": true,
+        "fechou": true,
+        "foco_volta_ao_cartao": true
+    },
+    {
+        "teste": "Tab ×30 dentro da montagem: foco nunca vai para o conteúdo atrás da janela (passar pelo <body>\/barra do navegador é esperado)",
+        "vezes_no_conteudo_atras": 0
+    },
+    {
+        "teste": "texto 200% em 390 px: \/",
+        "resultado": {
+            "overflowX": 0,
+            "headerH": 76,
+            "vh": 800,
+            "h1Visible": true
+        }
+    },
+    {
+        "teste": "página 200% (720 px efetivos) em \/",
+        "overflowX": 0
+    },
+    {
+        "teste": "texto 200% em 390 px: \/cardapio",
+        "resultado": {
+            "overflowX": 0,
+            "headerH": 76,
+            "vh": 800,
+            "h1Visible": true
+        }
+    },
+    {
+        "teste": "página 200% (720 px efetivos) em \/cardapio",
+        "overflowX": 0
+    },
+    {
+        "teste": "texto 200% em 390 px: \/checkout",
+        "resultado": {
+            "overflowX": 0,
+            "headerH": 76,
+            "vh": 800,
+            "h1Visible": true
+        }
+    },
+    {
+        "teste": "página 200% (720 px efetivos) em \/checkout",
+        "overflowX": 0
+    }
+]

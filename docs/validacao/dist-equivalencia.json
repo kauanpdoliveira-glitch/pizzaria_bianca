@@ -1,0 +1,163 @@
+[
+    {
+        "w": 1440,
+        "rota": "\/",
+        "elementos": 117,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 1440,
+        "rota": "\/historia",
+        "elementos": 99,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 1440,
+        "rota": "\/cardapio",
+        "elementos": 305,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 1440,
+        "rota": "\/checkout",
+        "elementos": 119,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 1440,
+        "rota": "\/pedido\/<token>",
+        "elementos": 73,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 1440,
+        "rota": "\/rota-que-nao-existe",
+        "elementos": 47,
+        "estilos_iguais": true,
+        "erros_console_fonte": 1,
+        "erros_console_dist": 1,
+        "erros": [
+            "\"Failed to load resource: the server responded with a status of 404 (Not Found)\""
+        ]
+    },
+    {
+        "w": 390,
+        "rota": "\/",
+        "elementos": 117,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 390,
+        "rota": "\/historia",
+        "elementos": 99,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 390,
+        "rota": "\/cardapio",
+        "elementos": 305,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 390,
+        "rota": "\/checkout",
+        "elementos": 119,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 390,
+        "rota": "\/pedido\/<token>",
+        "elementos": 73,
+        "estilos_iguais": true,
+        "erros_console_fonte": 0,
+        "erros_console_dist": 0
+    },
+    {
+        "w": 390,
+        "rota": "\/rota-que-nao-existe",
+        "elementos": 47,
+        "estilos_iguais": true,
+        "erros_console_fonte": 1,
+        "erros_console_dist": 1,
+        "erros": [
+            "\"Failed to load resource: the server responded with a status of 404 (Not Found)\""
+        ]
+    },
+    {
+        "teste": "movimento no build minificado (no-preference emulado)",
+        "pre_ao_carregar": 20,
+        "animacao_h1": "mo-up",
+        "ainda_escondidos": 0,
+        "revelados": 20,
+        "erros_console": 0
+    },
+    {
+        "teste": "compra completa no build minificado",
+        "etapa2": "{\"step\":\"2 Escolha os sabores\",\"sel\":\"1 de 2 selecionados\"}",
+        "etapa2_com_2_sabores": "{\"step\":\"2 Escolha os sabores\",\"sel\":\"2 de 2 selecionados\"}",
+        "sacola": {
+            "count": "1",
+            "total": "R$ 121,80",
+            "toast": "Pizza adicionada ao carrinho"
+        },
+        "acompanhamento": {
+            "url": "\/pedido\/<token>",
+            "texto": "ACOMPANHAMENTO | Pedido #19 | Recebido | Recebemos seu pedido! Ele ainda não foi aceito pela loja — avisaremos aqui. Estimativa: cerca de 30 min. | Recebido | Aceito | Em preparo | Pronto para retirad"
+        },
+        "erros_console": 0
+    },
+    {
+        "painel": "\/admin",
+        "elementos_esperados": 19,
+        "scripts": "picker.min.js,admin.min.js",
+        "erros_console": 0
+    },
+    {
+        "painel": "\/admin\/cardapio",
+        "elementos_esperados": 2,
+        "scripts": "picker.min.js,admin.min.js",
+        "erros_console": 0
+    },
+    {
+        "painel": "\/admin\/salao",
+        "elementos_esperados": 1,
+        "scripts": "picker.min.js,admin.min.js",
+        "erros_console": 0
+    },
+    {
+        "painel": "\/admin\/caixa",
+        "elementos_esperados": 1,
+        "scripts": "picker.min.js,admin.min.js",
+        "erros_console": 0
+    },
+    {
+        "painel": "\/admin\/usuarios",
+        "elementos_esperados": 14,
+        "scripts": "picker.min.js,admin.min.js",
+        "erros_console": 0
+    },
+    {
+        "painel": "\/garcom",
+        "elementos_esperados": 9,
+        "scripts": "picker.min.js,garcom.min.js",
+        "erros_console": 0
+    }
+]

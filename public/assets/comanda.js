@@ -1,0 +1,1 @@
+document.getElementById('do-print').addEventListener('click', () => window.print());

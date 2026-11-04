@@ -1,0 +1,24 @@
+<?php
+ob_implicit_flush(true);
+require __DIR__ . '/../../src/bootstrap.php';
+require __DIR__ . '/cdp.php';
+$c = new Cdp(Cdp::pageWs(9333)); $c->call('Page.enable'); $c->call('Runtime.enable');
+$c->call('Emulation.setEmulatedMedia', ['features' => [['name' => 'prefers-reduced-motion', 'value' => 'no-preference']]]);
+$B = 'http://127.0.0.1:8099'; $dir = $argv[1]; @mkdir($dir, 0775, true);
+$set = fn(int $w, int $h, bool $m = false) => $c->call('Emulation.setDeviceMetricsOverride', ['width' => $w, 'height' => $h, 'deviceScaleFactor' => $m ? 2 : 1, 'mobile' => $m]);
+$shot = function (string $name, bool $full = false) use ($c, $dir) { $r = $c->call('Page.captureScreenshot', ['format' => 'png', 'captureBeyondViewport' => $full]); file_put_contents("$dir/$name.png", base64_decode($r['data'])); echo "$name.png\n"; };
+[$ownerEmail, $pw] = e2e_owner();
+$set(1440, 900); $c->navigate("$B/", 0.4); $c->pump(2.2); $shot('01-landing-1440-topo');
+$c->js("scrollTo(0, document.querySelector('.cats').getBoundingClientRect().top + scrollY - 120)"); $c->pump(1.2); $shot('02-landing-1440-categorias');
+$c->js("scrollTo(0, document.querySelector('#hist').getBoundingClientRect().top + scrollY - 140)"); $c->pump(1.2); $shot('03-landing-1440-historia');
+$set(390, 844, true); $c->navigate("$B/", 0.4); $c->pump(2.2); $shot('04-landing-390-topo');
+$c->js("document.querySelector('.mnav summary').click()"); $c->pump(0.6); $shot('05-landing-390-menu-aberto');
+$c->navigate("$B/cardapio", 0.4); $c->pump(1.8); $shot('06-cardapio-390');
+$c->js("[...document.querySelectorAll('h3')].find(h=>h.innerText.trim()==='Margherita').closest('button').click()"); $c->pump(0.8); $shot('07-montagem-390');
+$set(1440, 900); $c->navigate("$B/historia", 0.4); $c->pump(1.0); $c->js("scrollTo(0, document.querySelector('.timeline').getBoundingClientRect().top + scrollY - 160)"); $c->pump(1.3); $shot('08-historia-1440-linha-do-tempo');
+$c->navigate("$B/equipe", 0.4); $c->pump(0.6); $shot('09-login-equipe-1440');
+$c->js("(()=>{const f=document.querySelector('form'); f.querySelector('[name=email]').value=" . json_encode($ownerEmail) . "; f.querySelector('[name=password]').value=" . json_encode($pw) . "; f.requestSubmit();})()"); $c->pump(1.6);
+$c->navigate("$B/admin/cardapio", 0.4); $c->pump(1.2); $shot('10-admin-catalogo-1440');
+$c->navigate("$B/admin", 0.4); $c->pump(1.5); $shot('11-admin-pedidos-1440');
+$c->navigate("$B/admin/salao", 0.4); $c->pump(1.2); $shot('12-admin-salao-1440');
+echo "FIM\n";

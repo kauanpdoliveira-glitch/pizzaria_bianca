@@ -1,0 +1,7 @@
+; Copie para agent.ini (NÃO envie para a internet/repositório).
+url = https://SEU-DOMINIO.com.br
+token = COLE_AQUI_O_TOKEN_GERADO_NO_PAINEL
+; tcp = impressora de rede (porta 9100) | share = impressora compartilhada no Windows | file = grava em arquivo (testes)
+mode = tcp
+target = 192.168.0.50:9100
+poll_seconds = 3

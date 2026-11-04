@@ -1,0 +1,86 @@
+[
+    {
+        "cond": "A natural (sem emulacao)",
+        "mq_reduce": true,
+        "h1_anim": "none",
+        "h1_opacity_t0.6s": "1",
+        "pre_on_load": 0,
+        "scroll_slow": {
+            "pre": 0,
+            "inn": 0,
+            "hidden": 0
+        },
+        "scroll_back_top": {
+            "y": 0,
+            "pre": 0
+        },
+        "anims_running_after_5s": 0,
+        "overflow_x": 0,
+        "cta_click_in_transition_goes_to": "\/cardapio"
+    },
+    {
+        "cond": "B emulado no-preference",
+        "mq_reduce": false,
+        "h1_anim": "mo-up",
+        "h1_opacity_t0.6s": "1",
+        "pre_on_load": 20,
+        "scroll_slow": {
+            "pre": 0,
+            "inn": 20,
+            "hidden": 0
+        },
+        "scroll_back_top": {
+            "y": 0,
+            "pre": 0
+        },
+        "anims_running_after_5s": 0,
+        "overflow_x": 0,
+        "cta_click_in_transition_goes_to": "\/cardapio"
+    },
+    {
+        "cond": "C emulado reduce",
+        "mq_reduce": true,
+        "h1_anim": "none",
+        "h1_opacity_t0.6s": "1",
+        "pre_on_load": 0,
+        "scroll_slow": {
+            "pre": 0,
+            "inn": 0,
+            "hidden": 0
+        },
+        "scroll_back_top": {
+            "y": 0,
+            "pre": 0
+        },
+        "anims_running_after_5s": 0,
+        "overflow_x": 0,
+        "cta_click_in_transition_goes_to": "\/cardapio"
+    },
+    {
+        "cond": "D app.js (inclui o movimento) bloqueado: falha de script",
+        "pre": 0,
+        "tiles_opacity": "1,1,1,1,1,1,1",
+        "facts_opacity": "1,1,1,1",
+        "menu_cta": true
+    },
+    {
+        "cond": "E JavaScript desativado",
+        "pre": "n\/a",
+        "facts_opacity": "1,1,1,1"
+    },
+    {
+        "cond": "F navegacao repetida",
+        "passos": [
+            "\/:0 scripts, 7 anims",
+            "\/historia:0 scripts, 3 anims",
+            "\/:0 scripts, 7 anims",
+            "\/cardapio:0 scripts, 0 anims",
+            "\/:0 scripts, 7 anims",
+            "\/historia:0 scripts, 3 anims"
+        ]
+    },
+    {
+        "cond": "G media print",
+        "hidden": 0
+    }
+]

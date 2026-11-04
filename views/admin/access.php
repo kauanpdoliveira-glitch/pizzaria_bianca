@@ -1,0 +1,6 @@
+<h1>Auditoria de acessos</h1>
+<p class="note">Visível somente ao proprietário. Os totais por operador são <b>registros</b> de ações — não medem produtividade: uma mesa pode ser atendida por várias pessoas.</p>
+<section class="panel"><h2>Por operador</h2><div class="tw"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Último acesso</th><th class="r">Rodadas lançadas</th><th class="r">Recebimentos informados</th><th class="r">Recebimentos conferidos</th></tr></thead><tbody>
+<?php foreach ($ops as $o): ?><tr><td><?= e($o['name']) ?></td><td><?= e(Auth::ROLES[$o['role']] ?? $o['role']) ?></td><td><?= $o['last_login_at'] ? e(date('d/m H:i', strtotime($o['last_login_at']))) : '—' ?></td><td class="r"><?= (int)$o['rounds'] ?></td><td class="r"><?= (int)$o['reported'] ?></td><td class="r"><?= (int)$o['confirmed'] ?></td></tr><?php endforeach; ?></tbody></table></div></section>
+<section class="panel"><h2>Ações sensíveis (últimas 200)</h2><div class="tw"><table><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>
+<?php foreach ($log as $l): ?><tr><td><?= e(date('d/m H:i:s', strtotime($l['created_at']))) ?></td><td><?= e($l['user_name'] ?? '—') ?></td><td><?= e($l['action']) ?></td><td><?= e($l['detail']) ?></td></tr><?php endforeach; ?></tbody></table></div></section>

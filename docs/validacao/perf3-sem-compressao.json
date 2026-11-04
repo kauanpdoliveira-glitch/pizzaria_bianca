@@ -1,0 +1,134 @@
+[
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "home",
+        "cache": "frio",
+        "versao": "antes (ZIP de 14:03)",
+        "dcl": 1273,
+        "fcp": 1248,
+        "lcp": 5016,
+        "load": 4975,
+        "cls": 0.0184,
+        "tbt": 0,
+        "reqs": 14,
+        "kb": 935
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "home",
+        "cache": "frio",
+        "versao": "depois (build minificado)",
+        "dcl": 670,
+        "fcp": 804,
+        "lcp": 2952,
+        "load": 3899,
+        "cls": 0.0184,
+        "tbt": 0,
+        "reqs": 14,
+        "kb": 720
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "home",
+        "cache": "quente",
+        "versao": "antes (ZIP de 14:03)",
+        "dcl": 1279,
+        "fcp": 1236,
+        "lcp": 4984,
+        "load": 4946,
+        "cls": 0.0185,
+        "tbt": 0,
+        "reqs": 13,
+        "kb": 934
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "home",
+        "cache": "quente",
+        "versao": "depois (build minificado)",
+        "dcl": 698,
+        "fcp": 832,
+        "lcp": 2932,
+        "load": 3906,
+        "cls": 0.0184,
+        "tbt": 0,
+        "reqs": 13,
+        "kb": 719
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "cardapio",
+        "cache": "frio",
+        "versao": "antes (ZIP de 14:03)",
+        "dcl": 2968,
+        "fcp": 2808,
+        "lcp": 3760,
+        "load": 3718,
+        "cls": 0.0236,
+        "tbt": 0,
+        "reqs": 15,
+        "kb": 1358
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "cardapio",
+        "cache": "frio",
+        "versao": "depois (build minificado)",
+        "dcl": 2435,
+        "fcp": 1312,
+        "lcp": 3080,
+        "load": 1883,
+        "cls": 0.0213,
+        "tbt": 0,
+        "reqs": 17,
+        "kb": 1307
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "cardapio",
+        "cache": "quente",
+        "versao": "antes (ZIP de 14:03)",
+        "dcl": 1737,
+        "fcp": 1572,
+        "lcp": 2520,
+        "load": 0,
+        "cls": 0.0236,
+        "tbt": 0,
+        "reqs": 14,
+        "kb": 1347
+    },
+    {
+        "perfil": "lenta(4G ruim: CPU 4x, 1,6 Mbps, 150 ms)",
+        "pagina": "cardapio",
+        "cache": "quente",
+        "versao": "depois (build minificado)",
+        "dcl": 1542,
+        "fcp": 1116,
+        "lcp": 2032,
+        "load": 2013,
+        "cls": 0.0213,
+        "tbt": 0,
+        "reqs": 16,
+        "kb": 1307
+    },
+    {
+        "interacao": "abrir montagem da pizza (maior evento, ms)",
+        "versao": "antes (ZIP de 14:03)",
+        "execucoes": [
+            40,
+            48,
+            40
+        ],
+        "mediana": 40
+    },
+    {
+        "interacao": "abrir montagem da pizza (maior evento, ms)",
+        "versao": "depois (build minificado)",
+        "execucoes": [
+            48,
+            40,
+            40
+        ],
+        "mediana": 40
+    }
+]
