@@ -51,3 +51,10 @@ Ponto de recuperação: tag `pre-qz-tray` (commit `5ac5f04`) e cópia `D:\Pizzar
 - Um único diagnóstico "TESTE — NÃO PRODUZIR" (job #4) pelo mesmo caminho da aplicação: criado → reservado → `print()` aceito pelo QZ (1 tentativa) → "Enviado ao subsistema". **Saída física confirmada pelo usuário: saiu e está legível.**
 - Os 3 trabalhos do pedido #1 permaneceram **retidos** e não foram enviados.
 - **Não validado:** ESC/POS e corte em térmica; larguras 58/80 mm; impressão silenciosa; pedido do telefone até o papel; Vercel (plano Hobby inelegível para uso comercial; sem projeto criado).
+
+## Rodada 4 — pedido do telefone até a Epson L3210 (04/11/2026)
+- Pedido misto **#2** feito pelo telefone na URL do túnel temporário (app e QZ no mesmo PC; **não** é a Vercel). Gerou 3 trabalhos (Cozinha #5, Copa/Bar #6, Balcão #7), cada um enviado **uma vez** pelo QZ 2.3.0 (autorização manual) à EPSON L3210 Series, HTML A4, 1 via por destino. Estação com 1 aba; processamento iniciado após autorização do lote e **parado** ao terminar.
+- **Saída física confirmada pelo usuário:** as 3 folhas saíram corretas.
+- Os 3 trabalhos do pedido #1 permaneceram **retidos**.
+- Regras validadas por software (90 testes) e no papel: balcão completo, cozinha só pizza, copa só bebida, sem comanda vazia, marca "TESTE — NÃO PRODUZIR".
+- **Pendentes:** ESC/POS e corte em térmica, 58/80 mm, impressão silenciosa (certificado confiável), Vercel/URL fixa (plano elegível + MySQL).
