@@ -52,7 +52,8 @@ function StartApp($url) {
     Start-Sleep 2; Log "app PHP iniciado (pid $($p.Id))"; return $p
 }
 
-switch ($Action) {
+if (-not $Run) {   # o processo supervisor (-Run) NAO executa as acoes (evita recursao)
+  switch ($Action) {
     'start' {
         if (Test-Path $pidFile) { $op = Get-Content $pidFile; if (Get-Process -Id $op -ErrorAction SilentlyContinue) { Write-Host "Ja esta rodando (supervisor $op). Use status."; exit 0 } }
         if (-not (Test-Path $cf)) { throw "cloudflared.exe nao encontrado em $cf" }
@@ -83,16 +84,22 @@ switch ($Action) {
     }
     default { Write-Host 'Acoes: start | stop | status | url | backup' }
 }
+}
 
 if ($Action -eq 'start' -and $Run) {   # processo supervisor (fica em segundo plano)
     Set-Content $pidFile $PID; Log "supervisor iniciado (pid $PID)"
-    $t = StartTunnel; $app = StartApp $t.Url; $fails = 0
+    $t = $null; $app = StartApp $null; $fails = 0; $nextTunnel = Get-Date   # o site local sobe SEMPRE; o tunel e tentado com espera crescente
+    $wait = 60
     while ($true) {
         Start-Sleep 20
         try {
-            if ($t.Proc.HasExited) { Log 'tunel caiu: reiniciando (a URL mudara; reenvie convites)'; $t = StartTunnel; if ($app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force }; $app = StartApp $t.Url; $fails = 0; continue }
+            if ($t -and $t.Proc.HasExited) { Log 'tunel caiu (a URL mudara; reenvie convites)'; $t = $null; Remove-Item $urlFile -ErrorAction SilentlyContinue; $nextTunnel = Get-Date }
+            if (-not $t -and (Get-Date) -ge $nextTunnel) {
+                try { $t = StartTunnel; $wait = 60; if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }; $app = StartApp $t.Url; $fails = 0 }
+                catch { Log ("tunel indisponivel: " + $_.Exception.Message + " (nova tentativa em ${wait}s)"); $nextTunnel = (Get-Date).AddSeconds($wait); $wait = [Math]::Min(900, $wait * 2) }
+            }
             if ($app.HasExited -or -not (Health)) { $fails++ } else { $fails = 0 }
-            if ($fails -ge 2) { Log 'app sem resposta: reiniciando'; if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }; $app = StartApp $t.Url; $fails = 0 }
+            if ($fails -ge 2) { Log 'app sem resposta: reiniciando'; if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }; $app = StartApp $(if ($t) { $t.Url } else { $null }); $fails = 0 }
             Rotate 'supervisor.log'
         } catch { Log ("erro no supervisor: " + $_.Exception.Message) }
     }

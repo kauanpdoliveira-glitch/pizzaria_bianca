@@ -23,3 +23,7 @@ Procedimento **pausado a pedido do proprietário**. Nada novo foi iniciado depoi
 3. Aceitação pela URL pública e persistência após reinício (pedido único, status, fila, layouts).
 4. Decisões externas: SMTP real (Brevo/Resend; credenciais em `storage\homologacao\env.ps1`), domínio para túnel nomeado, novo repositório GitHub (login GitHub no navegador do app), tarefas agendadas (backup diário/início com o Windows).
 5. Commitar `bin/user-status.php` e este arquivo (rodar `php bin/scan-secrets.php` **antes** de qualquer push; só enviar se passar).
+
+## Atualização (retomada)
+- **Incidente:** a primeira versão do `bin\homologacao.ps1` reiniciava a si mesma em cadeia (o processo supervisor repetia a ação `start`) e criou dezenas de processos e pedidos de túnel em segundos. Todos foram encerrados à mão; o script foi corrigido (o processo supervisor não executa mais as ações). Efeito colateral: a Cloudflare respondeu **HTTP 429** (limite de pedidos de túnel rápido) por um tempo indeterminado.
+- **Agora:** o supervisor mantém o **app local no ar** (`http://127.0.0.1:8080`, `/saude` OK) e **tenta o túnel de novo** com espera crescente (60 s até 15 min). A URL pública aparece em `storage\homologacao\url.txt` / `bin\homologacao.ps1 url` quando o túnel subir.
