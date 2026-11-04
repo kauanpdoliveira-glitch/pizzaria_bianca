@@ -95,4 +95,26 @@ $m2 = new C('m2'); $m2->login('gerente@teste.local', $pw['mgr']); $m2->req('GET'
 chk('gerente autorizado abre Configurações → Impressão', $m2->req('GET', '/admin/config/impressao')['code'] === 200);
 chk('gerente autorizado cria estação', $m2->req('POST', '/admin/config/impressao', ['name' => 'Do gerente', 'code' => 'do-gerente'])['code'] === 302 && (int)Db::val("SELECT COUNT(*) FROM print_stations WHERE code = 'do-gerente'") === 1);
 chk('gerente antigo (sem autorização) continua barrado', $m->req('POST', '/admin/config/impressao', ['name' => 'Outra'])['code'] === 403 || $m->req('POST', '/admin/config/impressao', ['name' => 'Outra'])['code'] === 302);
+// ---- editor de layouts: permissões no backend, prévia sem efeitos, rascunho/ativação ----
+$LP = '/admin/config/impressao/layouts?sector=cozinha';
+chk('layouts: dono abre o editor', $o->req('GET', $LP)['code'] === 200);
+chk('layouts: gerente autorizado abre', $m2->req('GET', $LP)['code'] === 200);
+chk('layouts: gerente SEM autorização barrado', in_array($m->req('GET', $LP)['code'], [403, 302], true));
+chk('layouts: garçom barrado', in_array($w->req('GET', $LP)['code'], [302, 403], true));
+chk('layouts: anônimo não gera prévia', in_array($anon->req('POST', '/admin/api/layout/preview', ['sector' => 'cozinha'], true, true)['code'], [401, 419], true));
+chk('layouts: garçom não gera prévia', in_array($w->req('POST', '/admin/api/layout/preview', ['sector' => 'cozinha'], true)['code'], [401, 403], true));
+$lay = ['blocks' => array_map(fn($id) => ['id' => $id, 'show' => true, 'align' => 'left', 'size' => 'normal', 'bold' => true], ['order_number', 'datetime', 'modality', 'items', 'order_notes']), 'page' => ['separator' => '-', 'spacing' => 'normal'], 'header' => ['brand' => true, 'brand_text' => '<script>alert(1)</script>', 'subtitle' => true], 'footer' => ['text' => 'ok']];
+$jobsBefore = (int)Db::val('SELECT COUNT(*) FROM print_jobs');
+$pv = $o->req('POST', '/admin/api/layout/preview', ['sector' => 'cozinha', 'layout' => $lay, 'scenario' => 'half', 'mode' => 'escpos', 'paper' => 80], true);
+chk('layouts: prévia devolve HTML escapado e perfil', $pv['code'] === 200 && str_contains($pv['json']['html'], '&lt;script&gt;') && !str_contains($pv['json']['html'], '<script>') && str_contains($pv['json']['note'], 'ESC/POS'), $pv['body']);
+chk('layouts: prévia não cria trabalhos', (int)Db::val('SELECT COUNT(*) FROM print_jobs') === $jobsBefore);
+$bad = $lay; $bad['blocks'][] = ['id' => 'script', 'show' => true];
+chk('layouts: bloco desconhecido recusado (422)', $o->req('POST', '/admin/api/layout/preview', ['sector' => 'cozinha', 'layout' => $bad], true)['code'] === 422);
+$form = ['sector' => 'cozinha', 'act' => 'save', 'id' => 0, 'name' => 'E2E rascunho', 'page' => ['separator' => '=', 'spacing' => 'airy'], 'header' => ['brand' => '1', 'brand_text' => 'BIANCA', 'subtitle' => '1'], 'footer_text' => 'e2e'];
+foreach (['order_number', 'datetime', 'modality', 'items', 'order_notes'] as $i => $id) $form['blocks'][$i] = ['id' => $id, 'show' => '1', 'align' => 'left', 'size' => 'normal', 'bold' => '1'];
+$o->req('GET', $LP);
+chk('layouts: dono salva rascunho (não ativa, não imprime)', $o->req('POST', '/admin/impressao/layout', $form)['code'] === 302 && Db::val("SELECT status FROM print_layouts WHERE name = 'E2E rascunho'") === 'draft' && (int)Db::val('SELECT COUNT(*) FROM print_jobs') === $jobsBefore);
+$lid = (int)Db::val("SELECT id FROM print_layouts WHERE name = 'E2E rascunho'");
+chk('layouts: gerente sem autorização não salva nem ativa', in_array($m->req('POST', '/admin/impressao/layout', ['sector' => 'cozinha', 'act' => 'restore', 'id' => $lid])['code'], [403, 302], true) && Db::val('SELECT status FROM print_layouts WHERE id = ' . $lid) === 'draft');
+chk('layouts: dono ativa', $o->req('POST', '/admin/impressao/layout', ['sector' => 'cozinha', 'act' => 'restore', 'id' => $lid])['code'] === 302 && Db::val('SELECT status FROM print_layouts WHERE id = ' . $lid) === 'active');
 echo "\nResultado: $pass passou, $fail falhou\n"; exit($fail ? 1 : 0);

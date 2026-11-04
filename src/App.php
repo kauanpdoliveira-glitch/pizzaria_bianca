@@ -36,7 +36,7 @@ final class App
             ['GET', '#^/admin/usuarios$#', 'admUsers'], ['POST', '#^/admin/usuarios$#', 'admUsersSave'], ['GET', '#^/admin/acessos$#', 'admAccess'],
             ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'], ['POST', '#^/admin/impressao/reter$#', 'admPrintHold'], ['POST', '#^/admin/impressao/destinos$#', 'admPrintDestinations'], ['POST', '#^/admin/impressao/setores$#', 'admPrintCategories'], ['POST', '#^/admin/impressao/(\d+)/liberar$#', 'admPrintRelease'],
             // estações de impressão (QZ Tray)
-            ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
+            ['GET', '#^/admin/config/impressao/layouts$#', 'admLayouts'], ['POST', '#^/admin/impressao/layout$#', 'admLayoutAction'], ['POST', '#^/admin/api/layout/preview$#', 'apiLayoutPreview'], ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
             ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
             ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign|control|arm-preview)$#', 'apiStation'],
             ['POST', '#^/admin/api/estacao/(\d+)/(sending|result)/([0-9a-f-]{36})$#', 'apiStationJob'],
@@ -747,6 +747,64 @@ final class App
         redirect('/admin/impressao');
     }
 
+    // ---------- editor de layouts de comandas ----------
+    private static function layoutFromPost(string $sector): array
+    {
+        $blocks = [];
+        foreach ((array)($_POST['blocks'] ?? []) as $b) $blocks[] = ['id' => (string)($b['id'] ?? ''), 'show' => !empty($b['show']), 'align' => (string)($b['align'] ?? ''), 'size' => (string)($b['size'] ?? ''), 'bold' => !empty($b['bold']), 'options' => !empty($b['options']), 'prices' => !empty($b['prices'])];
+        $p = (array)($_POST['page'] ?? []); $h = (array)($_POST['header'] ?? []);
+        return ['page' => ['separator' => (string)($p['separator'] ?? '-'), 'spacing' => (string)($p['spacing'] ?? 'normal'), 'cols' => $p['cols'] ?? null, 'margin' => $p['margin'] ?? null],
+            'header' => ['brand' => !empty($h['brand']), 'brand_text' => (string)($h['brand_text'] ?? ''), 'subtitle' => !empty($h['subtitle']), 'logo' => !empty($h['logo'])],
+            'footer' => ['text' => (string)($_POST['footer_text'] ?? '')], 'blocks' => $blocks];
+    }
+    private static function admLayouts(): void
+    {
+        $sector = (string)($_GET['sector'] ?? 'balcao'); if (!isset(Printing::SECTORS[$sector])) $sector = 'balcao';
+        $rows = PrintLayout::rows($sector); $sel = isset($_GET['id']) ? PrintLayout::get((int)$_GET['id']) : null;
+        if ($sel && $sel['sector'] !== $sector) $sel = null;
+        $base = $sel ?: PrintLayout::active($sector);
+        self::adm('admin/layouts', ['title' => 'Layouts de comandas', 'sector' => $sector, 'rows' => $rows, 'sel' => $sel, 'lay' => PrintLayout::dataOf($base, $sector), 'baseName' => $base['name'] ?? 'Modelo padrão',
+            'activeRow' => PrintLayout::active($sector), 'catalog' => PrintLayout::catalog($sector), 'activeNav' => 'print', 'logoOk' => is_file(APP_ROOT . '/public/assets/brand/logo-bianca-360.png')], 'print_config');
+    }
+    private static function admLayoutAction(): void
+    {
+        $u = Auth::require('print_config');
+        $sector = (string)($_POST['sector'] ?? ''); $act = (string)($_POST['act'] ?? ''); $id = (int)($_POST['id'] ?? 0); $go = '/admin/config/impressao/layouts?sector=' . urlencode($sector);
+        try {
+            if (!isset(Printing::SECTORS[$sector])) throw new HttpError(422, 'Destino inválido.');
+            if ($act === 'save' || $act === 'activate') {
+                $nid = PrintLayout::saveDraft($id ?: null, $sector, (string)($_POST['name'] ?? ''), self::layoutFromPost($sector), $u);
+                if ($act === 'activate') { PrintLayout::activate($nid, $u); self::flash('Layout ATIVADO. Vale para os próximos pedidos; trabalhos já criados mantêm o layout com que nasceram.'); }
+                else self::flash('Rascunho salvo (nada foi impresso nem ativado).');
+                $go .= '&id=' . $nid;
+            } elseif ($act === 'duplicate') { $go .= '&id=' . PrintLayout::duplicate($id, $u); self::flash('Cópia criada como rascunho.'); }
+            elseif ($act === 'rename') { PrintLayout::rename($id, (string)($_POST['name'] ?? '')); self::flash('Nome atualizado.'); $go .= '&id=' . $id; }
+            elseif ($act === 'preset') { $ps = PrintLayout::presets($sector); $k = (string)($_POST['preset'] ?? ''); if (!isset($ps[$k])) throw new HttpError(422, 'Modelo inicial inválido.'); $nid = PrintLayout::saveDraft(null, $sector, $ps[$k][0], $ps[$k][1], $u); $go .= '&id=' . $nid; self::flash('Rascunho criado a partir do modelo (nada foi ativado nem impresso).'); }
+            elseif ($act === 'reset') { $go .= '&id=' . PrintLayout::resetDefault($sector, $u); self::flash('Modelo padrão criado como rascunho (a versão ativa não mudou).'); }
+            elseif ($act === 'restore') { $nid = PrintLayout::activate($id, $u); self::flash('Versão restaurada e ativada como nova versão.'); $go .= '&id=' . $nid; }
+            elseif ($act === 'test') {
+                $row = PrintLayout::get($id); if (!$row || $row['sector'] !== $sector) throw new HttpError(422, 'Salve o rascunho antes de pedir o teste.');
+                if (empty(array_filter(PrintStation::all(), fn($s) => $s['active'] && !empty($s['map'][$sector]) && (int)$s['map'][$sector]['active'] === 1))) throw new HttpError(422, 'Nenhuma estação ativa tem impressora mapeada para este destino.');
+                Printing::enqueueLayoutTest($id, (string)($_POST['scenario'] ?? 'simple'), $u); self::flash('Teste enfileirado (1 via, dados fictícios, TESTE — NÃO PRODUZIR). Sai pela estação aberta; não imprime ao salvar nem ao visualizar.'); $go .= '&id=' . $id;
+            } else throw new HttpError(422, 'Ação inválida.');
+        } catch (HttpError $e) { self::flash($e->getMessage(), true); if ($id) $go .= '&id=' . $id; }
+        redirect($go);
+    }
+    /** Prévia com dados FICTÍCIOS: não grava nem imprime nada. */
+    private static function apiLayoutPreview(): void
+    {
+        Auth::require('print_config', true);
+        $b = self::body(); $sector = (string)($b['sector'] ?? '');
+        $layout = PrintLayout::validate($sector, (array)($b['layout'] ?? []));
+        $mode = ($b['mode'] ?? 'html') === 'escpos' ? 'escpos' : 'html'; $paper = (int)($b['paper'] ?? 80); if (!in_array($paper, [58, 80, 210], true) || ($paper === 210 && $mode !== 'html')) $paper = 80;
+        $cols = $layout['page']['cols'] ?? ($paper === 58 ? 32 : ($paper === 210 ? 80 : 48)); $margin = $layout['page']['margin'] ?? 0;
+        $scenario = isset(PrintLayout::SCENARIOS[$b['scenario'] ?? '']) ? $b['scenario'] : 'simple';
+        $job = ['sector' => $sector, 'kind' => !empty($b['reprint']) ? 'reprint' : 'original', 'paper' => $paper, 'created_by' => 'Operador exemplo', 'reason' => 'exemplo de motivo'];
+        $lines = PrintLayout::render(PrintLayout::fakeOrder($scenario, $sector), $job, $layout, ['cols' => max(20, $cols - $margin)]);
+        $note = $mode === 'escpos' ? 'Prévia aproximada de térmica ESC/POS (' . $cols . ' colunas; fonte monoespaçada, "Extra" vira "Grande", logo não é impressa). A aparência real depende do modelo.' : 'Prévia aproximada em HTML/A4. Impressoras e drivers diferentes podem alterar tamanhos e margens.';
+        $w = $mode === 'escpos' ? ($cols * 0.6) . 'em' : ($paper === 210 ? '190mm' : ($paper === 58 ? '48mm' : '72mm'));
+        json_out(['html' => '<div class="lay-paper" style="width:' . e($w) . '">' . PrintFormatter::htmlBody($lines, ['mode' => $mode]) . '</div>', 'lines' => count($lines), 'note' => $note, 'warn' => $mode === 'escpos' && $layout['header']['logo'] ? 'Logo só aparece no modo HTML.' : null]);
+    }
     private static function admPrintDestinations(): void
     {
         Auth::require('print_config');

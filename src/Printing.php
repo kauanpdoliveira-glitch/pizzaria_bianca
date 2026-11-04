@@ -82,7 +82,7 @@ final class Printing
             if ($onlySectors && !in_array($sector, $onlySectors, true)) continue;
             $key = $kind === 'original' ? "o$orderId:$sector:original" : (in_array($kind, ['cancel', 'update'], true) ? "o$orderId:$sector:$kind:v{$o['version']}" : "o$orderId:$sector:$kind:" . bin2hex(random_bytes(6)));
             $c = $cfg[$sector]; $paper = (int)$c['paper'] === 58 ? 58 : 80;
-            $f = ['order_id' => $orderId, 'sector' => $sector, 'paper' => $paper, 'kind' => $kind, 'job_key' => $key, 'version' => (int)$o['version'], 'copies' => (int)$c['copies'], 'origin' => $origin,
+            $f = ['order_id' => $orderId, 'sector' => $sector, 'paper' => $paper, 'kind' => $kind, 'job_key' => $key, 'version' => (int)$o['version'], 'copies' => (int)$c['copies'], 'origin' => $origin, 'layout_id' => $kind === 'reprint' ? (Db::val("SELECT layout_id FROM print_jobs WHERE order_id = ? AND sector = ? AND kind IN ('original','update') ORDER BY id DESC LIMIT 1", [$orderId, $sector]) ?: null) : PrintLayout::activeId($sector),   // reimpressão usa SEMPRE o layout do trabalho original
                 'reason' => $reason !== null ? mb_substr($reason, 0, 200) : null, 'snap_json' => json_encode(['copies' => (int)$c['copies'], 'paper' => $paper, 'auto' => (int)$c['auto'], 'values' => (int)$c['values'], 'sector' => $sector], JSON_UNESCAPED_UNICODE)];
             if (empty($c['auto']) && in_array($kind, ['original', 'update', 'cancel'], true)) { $f['status'] = 'held'; $f['last_error'] = 'Impressão automática desligada para este destino; libere para imprimir.'; }
             if ($id = self::insertJob($f, $user)) $ids[] = $id;
@@ -93,6 +93,18 @@ final class Printing
                 'last_error' => mb_substr("Sem destino de impressão (defina o setor da categoria/produto): $nomes", 0, 300), 'version' => (int)$o['version']], $user)) $ids[] = $id;
         }
         return $ids;
+    }
+
+    /** Teste CONTROLADO de um layout do editor: 1 via, dados fictícios, marcado TESTE — NÃO PRODUZIR. Só sai quando uma estação com impressora mapeada para o destino o consumir. */
+    public static function enqueueLayoutTest(int $layoutId, string $scenario, array $user): int
+    {
+        $l = PrintLayout::get($layoutId);
+        if (!$l) throw new HttpError(404, 'Layout não encontrado.');
+        if (!isset(PrintLayout::SCENARIOS[$scenario])) $scenario = 'simple';
+        $id = (int)self::insertJob(['order_id' => null, 'sector' => $l['sector'], 'paper' => 80, 'kind' => 'test', 'origin' => 'layout.test', 'layout_id' => $layoutId, 'copies' => 1, 'job_key' => "test:layout:$layoutId:" . bin2hex(random_bytes(6)),
+            'snap_json' => json_encode(['scenario' => $scenario, 'layout' => $layoutId, 'version' => (int)$l['version']])], $user);
+        Auth::audit('print.layout.test', "layout #$layoutId ($scenario)");
+        return $id;
     }
 
     /** Pedido cancelado: o que ainda NÃO foi enviado à produção é descartado (com motivo); o que já foi recebe um aviso explícito de cancelamento. */
@@ -168,8 +180,13 @@ final class Printing
     public static function build(array $job, ?array $profile = null): array
     {
         $profile = ($profile ?? []) + ['cols' => (int)($job['paper'] ?? 80) === 58 ? 32 : 48, 'charset' => 'ascii', 'cut' => true, 'mode' => 'escpos', 'margin' => 0, 'copies' => 1, 'paper' => (int)($job['paper'] ?? 80)];
+        $layoutRow = !empty($job['layout_id']) ? PrintLayout::get((int)$job['layout_id']) : null; $layout = PrintLayout::dataOf($layoutRow, (string)$job['sector']);
+        if ($layout['page']['cols'] !== null) $profile['cols'] = (int)$layout['page']['cols'];        // largura/margem do layout, se definidas, valem no lugar da impressora (uma só aplicação)
+        if ($layout['page']['margin'] !== null) $profile['margin'] = (int)$layout['page']['margin'];
         $wrap = ['cols' => max(20, (int)$profile['cols'] - (int)$profile['margin'])] + $profile;   // largura útil = colunas − margem
-        $lines = $job['order_id'] ? self::lines((array)Orders::get((int)$job['order_id']), $job, $wrap) : self::testLines($job, $wrap);
+        if ($job['order_id']) $lines = self::lines((array)Orders::get((int)$job['order_id']), $job, $wrap, $layout);
+        elseif ($layoutRow) { $sn = json_decode((string)($job['snap_json'] ?? ''), true) ?: []; $lines = self::lines(PrintLayout::fakeOrder((string)($sn['scenario'] ?? 'simple'), (string)$job['sector']), $job, $wrap, $layout); }   // teste do editor: dados fictícios + marca de teste
+        else $lines = self::testLines($job, $wrap);
         if ($profile['mode'] === 'html') return ['lines' => $lines, 'bytes' => PrintFormatter::html($lines, $profile), 'mode' => 'html'];
         return ['lines' => $lines, 'bytes' => PrintFormatter::escpos($lines, $profile), 'mode' => 'escpos'];
     }
@@ -266,76 +283,19 @@ final class Printing
     }
 
     // ---------- conteúdo ----------
-    private static function title(array $job): string
+    public static function title(array $job): string
     {
         $k = ['reprint' => 'REIMPRESSAO', 'update' => 'PEDIDO ALTERADO', 'cancel' => 'PEDIDO CANCELADO', 'test' => 'TESTE'][$job['kind'] ?? 'original'] ?? null;
         return mb_strtoupper(self::SECTORS[$job['sector']] ?? $job['sector']) . ($k ? ' - ' . $k : '');
     }
 
-    /** @return list<array{t:string,b?:bool,big?:bool,c?:bool}> texto em UTF-8, já limpo; o charset é aplicado na saída ESC/POS */
-    public static function lines(array $o, array $job, ?array $profile = null): array
+    /** Linhas da comanda a partir do layout do trabalho (layout_id; sem layout = modelo padrão). A renderização vive em PrintLayout. */
+    public static function lines(array $o, array $job, ?array $profile = null, ?array $layout = null): array
     {
         $w = (int)($profile['cols'] ?? ((int)($job['paper'] ?? 80) === 58 ? 32 : 48));
-        $sector = $job['sector']; $kind = $job['kind'] ?? 'original'; $dine = $o['type'] === 'dine_in';
-        $values = $sector === 'balcao';   // o balcão sempre leva a comanda completa com valores e pagamento
-        $L = [];
-        $add = function (string $t, array $f = []) use (&$L, $w) {
-            foreach (PrintFormatter::wrap(PrintFormatter::clean($t), !empty($f['big']) ? intdiv($w, 2) : $w) as $part) $L[] = ['t' => $part] + $f;
-        };
-        $rule = fn() => $add(str_repeat('-', $w));
-        $add('PIZZARIA BIANCA', ['c' => true, 'b' => true]);
-        $add(self::title($job), ['c' => true, 'b' => true]);
-        if (env('APP_ENV') === 'staging') $add('TESTE — NÃO PRODUZIR', ['c' => true, 'b' => true, 'big' => true]);   // ambiente de testes: toda folha é marcada
-        if ($kind === 'update') $add('*** PEDIDO ALTERADO — esta comanda substitui a anterior ***', ['c' => true, 'b' => true]);
-        if ($kind === 'cancel') $add('*** NAO PRODUZIR ***', ['c' => true, 'b' => true, 'big' => true]);
-        $add($dine ? 'MESA ' . $o['table_number'] : 'PEDIDO #' . $o['id'], ['c' => true, 'big' => true]);
-        if ($dine) $add('Pedido #' . $o['id'], ['c' => true]);
-        $add(date('d/m/Y H:i', strtotime($o['created_at'])), ['c' => true]);
-        if ($kind === 'reprint') { $add('*** REIMPRESSÃO ' . date('d/m/Y H:i') . ' ***', ['c' => true, 'b' => true, 'big' => true]); $add('Operador: ' . ($job['created_by'] ?? '-') . ' | Motivo: ' . ($job['reason'] ?? '-'), ['b' => true]); }
-        $rule();
-        if ($dine) {
-            $tab = $o['tab_id'] ? Db::one('SELECT physical_number FROM tabs WHERE id = ?', [$o['tab_id']]) : null;
-            $add('SALAO - MESA ' . $o['table_number'], ['b' => true, 'big' => true]);
-            $add('Comanda: ' . ($tab['physical_number'] ?? 'sem no fisico') . ' (atend. #' . $o['visit_id'] . ')');
-            $add('Cliente: ' . $o['customer_name']);
-            $add('Garcom: ' . (($o['events'][0]['user_name'] ?? '') ?: '-'));
-        } else {
-            $add($o['type'] === 'delivery' ? 'ENTREGA' : 'RETIRADA NO BALCÃO', ['b' => true, 'big' => true, 'c' => true]);
-            if ($sector === 'balcao') {
-                $add('Cliente: ' . $o['customer_name']);
-                if ($o['customer_phone'] !== '') { $d = preg_replace('/\D+/', '', (string)$o['customer_phone']); $add('Tel: ' . (strlen($d) === 11 ? sprintf('(%s) %s-%s', substr($d, 0, 2), substr($d, 2, 5), substr($d, 7)) : (strlen($d) === 10 ? sprintf('(%s) %s-%s', substr($d, 0, 2), substr($d, 2, 4), substr($d, 6)) : $o['customer_phone']))); }
-                if ($o['type'] === 'delivery') {   // endereço só quando necessário à entrega
-                    $add('End: ' . $o['addr_street'] . ', ' . $o['addr_number'] . ($o['addr_complement'] ? ' - ' . $o['addr_complement'] : ''));
-                    $add('Bairro: ' . $o['zone_name']);
-                    if ($o['addr_reference']) $add('Ref: ' . $o['addr_reference']);
-                }
-            }
-        }
-        $rule();
-        foreach ($o['items'] as $it) {
-            if ($sector !== 'balcao' && self::itemSector((int)$it['product_id']) !== $sector) continue;
-            $add($it['qty'] . 'x ' . $it['name'] . ($it['size_name'] ? ' (' . $it['size_name'] . ')' : ''), ['b' => true]);
-            foreach ($it['options'] as $op) $add(($op['group_name'] === 'Retirar' ? '  - ' : '  + ') . $op['option_name'] . ($values && $op['price_cents'] ? ' ' . money((int)$op['price_cents']) : ''), ['b' => true]);
-            if ($it['notes']) $add($sector === 'balcao' ? '  OBS: ' . $it['notes'] : '  >>> OBSERVAÇÃO: ' . $it['notes'], ['b' => true] + ($sector === 'balcao' ? [] : ['big' => true]));
-            if ($values) $add(PrintFormatter::pad(money((int)$it['total_cents']), $w));
-        }
-        if ($o['notes'] && $sector !== 'copa') { $rule(); $add(($sector === 'cozinha' ? '>>> OBS DO PEDIDO: ' : 'OBS DO PEDIDO: ') . $o['notes'], ['b' => true]); }
-        if ($values) {
-            $rule();
-            $row = fn($a, $b) => $add($a . PrintFormatter::pad($b, $w - mb_strlen($a)));
-            $row('Subtotal', money((int)$o['subtotal_cents']));
-            if ($o['delivery_fee_cents']) $row('Taxa entrega', money((int)$o['delivery_fee_cents']));
-            if ($o['discount_cents']) $row('Desconto', '-' . money((int)$o['discount_cents']));
-            $add('TOTAL ' . money((int)$o['total_cents']), ['b' => true, 'big' => true, 'c' => true]);
-            $add('Forma de pagamento: ' . $o['payment_label'], ['b' => true]);
-            $add($o['payment_status'] === 'confirmed' ? 'PAGAMENTO CONFIRMADO' : ($o['payment_status'] === 'refunded' ? 'PAGAMENTO ESTORNADO' : 'PAGAMENTO PENDENTE'), ['b' => true, 'big' => true]);
-            if ($o['payment_status'] === 'pending') $add('(ainda não recebido)', ['b' => true]);
-            if ($o['change_for_cents']) $add('Troco para: ' . money((int)$o['change_for_cents']));
-        }
-        $add('');
-        return $L;
+        if ($layout === null) $layout = PrintLayout::dataOf(!empty($job['layout_id']) ? PrintLayout::get((int)$job['layout_id']) : null, (string)$job['sector']);
+        return PrintLayout::render($o, $job, $layout, ['cols' => $w]);
     }
-
     private static function testLines(array $job, array $profile): array
     {
         $w = (int)$profile['cols']; $L = [];

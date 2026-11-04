@@ -1,4 +1,5 @@
 <h1>Configurações → Impressão</h1>
+<?php if ($canConfig): ?><p><a class="b" href="/admin/config/impressao/layouts">Layouts de comandas (editor) →</a></p><?php endif; ?>
 <section class="panel"><h2>Como o pedido chega à impressora</h2>
 <ol>
 <li>O cliente abre o site pelo telefone (qualquer rede) e faz o pedido.</li>

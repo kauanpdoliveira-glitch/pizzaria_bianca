@@ -976,6 +976,92 @@ t('painel: categoria sem destino aparece como pendência; ambiente de testes mar
     unset($_ENV['APP_ENV']);
 });
 
+echo "Editor de layouts de comandas\n";
+$lt = fn(array $lines) => preg_replace('/\s+/', ' ', implode("\n", array_column($lines, 't')));
+t('validação: lista branca; obrigatórios não saem; texto nunca vira HTML/comando; limites', function () use ($lt) {
+    $d = PrintLayout::defaults('cozinha');
+    foreach ($d['blocks'] as &$b) if ($b['id'] === 'items') $b['show'] = false; unset($b);
+    $v = PrintLayout::validate('cozinha', $d); eq(array_values(array_filter($v['blocks'], fn($b) => $b['id'] === 'items'))[0]['show'], true);   // item não pode ser ocultado
+    $x = $d; $x['blocks'][] = ['id' => 'script', 'show' => true]; throws(fn() => PrintLayout::validate('cozinha', $x), 422);
+    $x = $d; $x['blocks'][0]['size'] = 'huge'; throws(fn() => PrintLayout::validate('cozinha', $x), 422);
+    $x = $d; array_pop($x['blocks']); throws(fn() => PrintLayout::validate('cozinha', $x), 422);                         // falta bloco
+    $x = $d; $x['blocks'][] = $x['blocks'][0]; throws(fn() => PrintLayout::validate('cozinha', $x), 422);                // repetido
+    $x = $d; $x['page']['cols'] = 500; throws(fn() => PrintLayout::validate('cozinha', $x), 422);
+    $x = $d; $x['page']['separator'] = '<b>'; throws(fn() => PrintLayout::validate('cozinha', $x), 422);
+    $x = $d; $x['header']['brand_text'] = '<img src=x onerror=alert(1)>' . "\x1B@\x1DV"; $x['footer']['text'] = str_repeat('a', 121); throws(fn() => PrintLayout::validate('cozinha', $x), 422);
+    $x['footer']['text'] = 'ok'; $v = PrintLayout::validate('cozinha', $x + ['extra' => 'x']); if (isset($v['extra'])) throw new Exception('chave desconhecida mantida');
+    $lines = PrintLayout::render(PrintLayout::fakeOrder('simple', 'cozinha'), ['sector' => 'cozinha', 'kind' => 'original'], $v, ['cols' => 48]);
+    $html = PrintFormatter::htmlBody($lines); if (str_contains($html, '<img') || !str_contains($html, '&lt;img')) throw new Exception('HTML não escapado');
+    if (preg_match('/[\x00-\x1F]/', implode('', array_column($lines, 't')))) throw new Exception('controle no texto');
+    throws(fn() => PrintLayout::validate('balcao', ['blocks' => PrintLayout::defaults('cozinha')['blocks']]), 422);          // blocos de outro destino
+});
+t('versões: rascunho edita no lugar; ativar arquiva o anterior; ativo/arquivado são imutáveis; restaurar cria nova versão', function () use ($u) {
+    Db::exec('DELETE FROM print_layouts');
+    $d = PrintLayout::defaults('balcao'); $a = PrintLayout::saveDraft(null, 'balcao', 'A', $d, $u); $a2 = PrintLayout::saveDraft($a, 'balcao', 'A2', $d, $u); eq($a2, $a);
+    eq(PrintLayout::activeId('balcao'), null); PrintLayout::activate($a, $u); eq(PrintLayout::activeId('balcao'), $a);
+    $d['footer']['text'] = 'versão B'; $b = PrintLayout::saveDraft($a, 'balcao', 'B', $d, $u); if ($b === $a) throw new Exception('ativo foi alterado no lugar');   // ativo → novo rascunho
+    eq(PrintLayout::get($a)['name'], 'A2'); eq(PrintLayout::get($b)['parent_id'], $a); eq(PrintLayout::activeId('balcao'), $a);   // ativo intacto até ativar
+    PrintLayout::activate($b, $u); eq(PrintLayout::get($a)['status'], 'archived'); eq(PrintLayout::activeId('balcao'), $b);
+    $c = PrintLayout::activate($a, $u); if ($c === $a) throw new Exception('restauração reutilizou o id'); eq(PrintLayout::get($a)['status'], 'archived'); eq(PrintLayout::activeId('balcao'), $c);
+    eq(count(PrintLayout::rows('balcao')), 3); eq(PrintLayout::get($c)['activated_by'], 'Teste'); eq(PrintLayout::get($b)['status'], 'archived');
+    throws(fn() => PrintLayout::activate($c, $u), 422);
+    $dup = PrintLayout::duplicate($c, $u); eq(PrintLayout::get($dup)['status'], 'draft'); PrintLayout::rename($dup, 'Renomeado'); eq(PrintLayout::get($dup)['name'], 'Renomeado');
+    throws(fn() => PrintLayout::rename($dup, ''), 422);
+});
+t('trabalho guarda a versão do layout; reimpressão usa a do original; ativar outro não muda trabalhos antigos', function () use ($order, $key, $pid, $sizeOf, $u, $lt) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_layouts');
+    $d = PrintLayout::defaults('cozinha'); $d['footer']['text'] = 'RODAPE-V1'; PrintLayout::activate(PrintLayout::saveDraft(null, 'cozinha', 'V1', $d, $u), $u); $v1 = PrintLayout::activeId('cozinha');
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]]), $key());
+    $j = Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'cozinha'", [$r['id']]); eq((int)$j['layout_id'], $v1);
+    $d['footer']['text'] = 'RODAPE-V2'; PrintLayout::activate(PrintLayout::saveDraft(null, 'cozinha', 'V2', $d, $u), $u);
+    $ids = Printing::reprint($r['id'], 'cozinha', $u, 'conferência'); $rj = Db::one('SELECT * FROM print_jobs WHERE id = ?', [$ids[0]]); eq((int)$rj['layout_id'], $v1);   // reimpressão = mesmo documento
+    if (!str_contains($lt(Printing::lines(Orders::get($r['id']), $rj)), 'RODAPE-V1') || !str_contains($lt(Printing::lines(Orders::get($r['id']), $rj)), 'REIMPRESSÃO')) throw new Exception('reimpressão com layout diferente ou sem marca');
+    $r2 = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]]), $key());
+    $j2 = Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'cozinha'", [$r2['id']]); eq((int)$j2['layout_id'], PrintLayout::activeId('cozinha'));
+    if (!str_contains($lt(Printing::lines(Orders::get($r['id']), $j)), 'RODAPE-V1')) throw new Exception('trabalho antigo mudou de layout');
+    eq((int)Db::val("SELECT copies FROM print_jobs WHERE id = ?", [$j2['id']]), 1);   // vias independentes do layout
+    Db::exec('DELETE FROM print_layouts');
+});
+t('renderização: ocultar opcionais, reordenar, separador, rodapé, cozinha sem dados pessoais, marcas obrigatórias fora do controle do usuário', function () use ($lt) {
+    $o = PrintLayout::fakeOrder('delivery', 'balcao'); $job = ['sector' => 'balcao', 'kind' => 'original'];
+    $d = PrintLayout::defaults('balcao'); $full = $lt(PrintLayout::render($o, $job, $d, ['cols' => 48]));
+    foreach (['Tel:', 'End: Rua das Flores', 'Ref: portão azul', 'Troco para', 'TOTAL', 'PAGAMENTO PENDENTE', '½', 'Catupiry'] as $x) if ($x !== '½' && !str_contains($full, $x)) throw new Exception("balcão sem $x");
+    $h = $d; foreach ($h['blocks'] as &$b) if (in_array($b['id'], ['customer_phone', 'change', 'reference'], true)) $b['show'] = false; unset($b);
+    $hid = $lt(PrintLayout::render($o, $job, PrintLayout::validate('balcao', $h), ['cols' => 48]));
+    foreach (['Tel:', 'Troco para', 'Ref:'] as $x) if (str_contains($hid, $x)) throw new Exception("$x não foi ocultado"); if (!str_contains($hid, '1x Calabresa')) throw new Exception('item sumiu');
+    $r = $d; $r['blocks'] = array_reverse($r['blocks']); $r['page']['separator'] = '='; $r['footer']['text'] = 'Obrigado!';
+    $L = PrintLayout::render($o, $job, PrintLayout::validate('balcao', $r), ['cols' => 48]); $t = $lt($L);
+    if (strpos($t, 'Troco') > strpos($t, 'PEDIDO #')) throw new Exception('ordem não aplicada'); if (!str_contains($t, str_repeat('=', 48)) || !str_contains($t, 'Obrigado!')) throw new Exception('separador/rodapé');
+    $k = $lt(PrintLayout::render(PrintLayout::fakeOrder('delivery', 'cozinha'), ['sector' => 'cozinha', 'kind' => 'original'], PrintLayout::defaults('cozinha'), ['cols' => 48]));
+    foreach (['Cliente Exemplo', '99999', 'Rua das Flores', 'R$', 'Coca'] as $x) if (str_contains($k, $x)) throw new Exception("cozinha com $x"); foreach (['Calabresa', 'Catupiry', 'sem cebola'] as $x) if (!str_contains($k, $x)) throw new Exception("cozinha sem $x");
+    foreach (['test', 'reprint', 'update', 'cancel'] as $kind) { $m = $lt(PrintLayout::render($o, ['sector' => 'balcao', 'kind' => $kind, 'created_by' => 'Ana', 'reason' => 'x'], $d, ['cols' => 48])); $need = ['test' => 'TESTE — NÃO PRODUZIR', 'reprint' => 'REIMPRESSÃO', 'update' => 'PEDIDO ALTERADO', 'cancel' => 'PEDIDO CANCELADO'][$kind]; if (!str_contains($m, $need)) throw new Exception("sem marca $kind"); }
+    $half = $lt(PrintLayout::render(PrintLayout::fakeOrder('half', 'cozinha'), ['sector' => 'cozinha', 'kind' => 'original'], PrintLayout::defaults('cozinha'), ['cols' => 48])); foreach (['½ Calabresa + ½ Portuguesa', 'sem cebola — ½ Portuguesa', 'cortar em 12'] as $x) if (!str_contains($half, $x)) throw new Exception("meio a meio sem $x");
+    $long = PrintLayout::render(PrintLayout::fakeOrder('long', 'balcao'), $job, $d, ['cols' => 32]); foreach ($long as $l) if (empty($l['big']) && mb_strlen($l['t']) > 32) throw new Exception('linha acima da largura'); if (count($long) < 25) throw new Exception('pedido extenso curto demais');
+    $cp = $lt(PrintLayout::render(PrintLayout::fakeOrder('long', 'copa'), ['sector' => 'copa', 'kind' => 'original'], PrintLayout::defaults('copa'), ['cols' => 48])); if (str_contains($cp, 'Margherita') || !str_contains($cp, 'Heineken')) throw new Exception('copa com pizza');
+});
+t('perfis: ESC/POS respeita alinhamento/tamanho suportado e ignora logo; HTML aceita extra e logo; largura/margem do layout valem uma vez', function () use ($lt, $u, $order, $key, $pid, $sizeOf) {
+    $d = PrintLayout::defaults('copa'); $d['header']['logo'] = true; $d['blocks'][0]['size'] = 'xl'; $d['blocks'][0]['align'] = 'right';
+    $L = PrintLayout::render(PrintLayout::fakeOrder('simple', 'copa'), ['sector' => 'copa', 'kind' => 'original'], PrintLayout::validate('copa', $d), ['cols' => 48]);
+    $e = PrintFormatter::escpos($L, ['charset' => 'ascii', 'cut' => false]); if (str_contains($e, 'base64') || !str_contains($e, "\x1Ba\x02") || !str_contains($e, "\x1D!\x11")) throw new Exception('ESC/POS sem alinhamento/tamanho');
+    $h = PrintFormatter::html($L, ['paper' => 80]); if (!str_contains($h, 'font-size:18pt') || !str_contains($h, 'text-align:right') || !str_contains($h, 'data:image/png;base64')) throw new Exception('HTML sem extra/alinhamento/logo');
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_layouts'); $d2 = PrintLayout::defaults('cozinha'); $d2['page']['cols'] = 40; $d2['page']['margin'] = 2; PrintLayout::activate(PrintLayout::saveDraft(null, 'cozinha', 'Estreito', $d2, $u), $u);
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]]), $key()); $j = Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'cozinha'", [$r['id']]);
+    $b = Printing::build($j, ['cols' => 48, 'margin' => 0, 'mode' => 'escpos', 'charset' => 'ascii', 'cut' => false]); foreach ($b['lines'] as $l) if (empty($l['big']) && mb_strlen($l['t']) > 38) throw new Exception('largura útil 40−2 não respeitada');
+    if (!str_contains($b['bytes'], "  ")) throw new Exception('margem do layout ausente'); Db::exec('DELETE FROM print_layouts');
+});
+t('modelos iniciais são válidos para todos os destinos', function () {
+    foreach (array_keys(Printing::SECTORS) as $s) foreach (PrintLayout::presets($s) as $k => [$name, $lay]) { PrintLayout::validate($s, $lay); if ($name === '') throw new Exception("modelo $k sem nome"); }
+});
+t('prévia e teste do layout: dados fictícios, 1 via, marcado; prévia/salvar não criam trabalhos', function () use ($u) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_layouts');
+    $id = PrintLayout::saveDraft(null, 'copa', 'Rascunho', PrintLayout::defaults('copa'), $u); foreach (array_keys(PrintLayout::SCENARIOS) as $s) PrintLayout::render(PrintLayout::fakeOrder($s, 'copa'), ['sector' => 'copa', 'kind' => 'original'], PrintLayout::defaults('copa'), ['cols' => 48]);
+    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs'), 0);   // nada imprime ao salvar ou visualizar
+    $j = Printing::enqueueLayoutTest($id, 'half', $u); $row = Db::one('SELECT * FROM print_jobs WHERE id = ?', [$j]);
+    eq($row['kind'], 'test'); eq((int)$row['copies'], 1); eq($row['order_id'], null); eq((int)$row['layout_id'], $id); eq($row['status'], 'queued');
+    $t = preg_replace('/\s+/', ' ', implode(' ', array_column(Printing::build($row, ['cols' => 48, 'mode' => 'html', 'paper' => 210])['lines'], 't'))); foreach (['TESTE — NÃO PRODUZIR', 'Guaraná 2 Litros'] as $x) if (!str_contains($t, $x)) throw new Exception("teste sem $x"); if (str_contains($t, 'Calabresa')) throw new Exception('copa com pizza no teste');
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_layouts');
+});
+
 echo "Hospedagem sem disco persistente\n";
 t('sessões no banco: gravar, ler, expirar e destruir', function () {
     $h = new DbSessions();
