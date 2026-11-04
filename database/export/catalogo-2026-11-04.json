@@ -65,7 +65,7 @@
                 "sort": 6,
                 "active": 1,
                 "is_pizza": 0,
-                "sector": "cozinha",
+                "sector": null,
                 "parent_id": null,
                 "max_flavors": null,
                 "allow_removals": 1
@@ -76,7 +76,7 @@
                 "sort": 7,
                 "active": 1,
                 "is_pizza": 0,
-                "sector": "balcao",
+                "sector": "copa",
                 "parent_id": null,
                 "max_flavors": null,
                 "allow_removals": 1

@@ -34,7 +34,7 @@ final class App
             ['GET', '#^/admin/clientes$#', 'admCustomers'], ['GET', '#^/admin/relatorios$#', 'admReports'], ['GET', '#^/admin/relatorios\.csv$#', 'admReportsCsv'],
             ['GET', '#^/admin/config$#', 'admConfig'], ['POST', '#^/admin/config$#', 'admConfigSave'],
             ['GET', '#^/admin/usuarios$#', 'admUsers'], ['POST', '#^/admin/usuarios$#', 'admUsersSave'], ['GET', '#^/admin/acessos$#', 'admAccess'],
-            ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'], ['POST', '#^/admin/impressao/reter$#', 'admPrintHold'], ['POST', '#^/admin/impressao/(\d+)/liberar$#', 'admPrintRelease'],
+            ['GET', '#^/admin/impressao$#', 'admPrint'], ['POST', '#^/admin/impressao/token$#', 'admPrintToken'], ['POST', '#^/admin/impressao/reter$#', 'admPrintHold'], ['POST', '#^/admin/impressao/destinos$#', 'admPrintDestinations'], ['POST', '#^/admin/impressao/setores$#', 'admPrintCategories'], ['POST', '#^/admin/impressao/(\d+)/liberar$#', 'admPrintRelease'],
             // estações de impressão (QZ Tray)
             ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
             ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
@@ -428,7 +428,7 @@ final class App
         $u = Auth::require('print', true);
         $b = self::body();
         $sector = isset($b['sector']) && $b['sector'] !== '' ? (string)$b['sector'] : null;
-        json_out(['jobs' => Printing::reprint((int)$id, $sector, $u)]);
+        json_out(['jobs' => Printing::reprint((int)$id, $sector, $u, (string)($b['reason'] ?? ''))]);
     }
     private static function admApiPrintRetry(string $jobId): void
     {
@@ -692,9 +692,7 @@ final class App
         $pm = Settings::json('payment_methods');
         foreach ($pm as $k => &$m) { $m['on'] = !empty($in['pay_on'][$k]) ? 1 : 0; if (!empty($in['pay_label'][$k])) $m['label'] = mb_substr(trim($in['pay_label'][$k]), 0, 80); }
         Settings::set('payment_methods', json_encode($pm, JSON_UNESCAPED_UNICODE));
-        $ps = Printing::sectors();
-        foreach ($ps as $k => &$s) { $s['on'] = !empty($in['ps_on'][$k]) ? 1 : 0; $s['paper'] = ($in['ps_paper'][$k] ?? '80') === '58' ? 58 : 80; $s['values'] = !empty($in['ps_values'][$k]) ? 1 : 0; }
-        Settings::set('print_sectors', json_encode($ps));
+        // destinos de impressão agora são configurados em Configurações → Impressão (permissão print_config)
         // bairros/zonas de entrega
         foreach (($in['z_name'] ?? []) as $i => $zn) {
             $zn = trim((string)$zn); $zid = (int)($in['z_id'][$i] ?? 0);
@@ -749,6 +747,24 @@ final class App
         redirect('/admin/impressao');
     }
 
+    private static function admPrintDestinations(): void
+    {
+        Auth::require('print_config');
+        try { Printing::saveSectors((array)($_POST['dest'] ?? [])); self::flash('Destinos de impressão salvos. Trabalhos já criados mantêm a configuração de quando nasceram.'); }
+        catch (HttpError $e) { self::flash($e->getMessage(), true); }
+        redirect('/admin/config/impressao');
+    }
+    /** Setor de produção por categoria (cozinha, copa ou NÃO DEFINIDO = pendência visível). Exceção por produto fica no cadastro do produto. */
+    private static function admPrintCategories(): void
+    {
+        Auth::require('print_config');
+        foreach ((array)($_POST['cat'] ?? []) as $id => $s) {
+            $s = in_array($s, ['cozinha', 'copa'], true) ? $s : null;
+            Db::exec('UPDATE categories SET sector = ? WHERE id = ?', [$s, (int)$id]);
+        }
+        Printing::forgetCache(); Auth::audit('print.categories', 'setores por categoria atualizados');
+        self::flash('Setores por categoria salvos. Pedidos já criados não mudam.'); redirect('/admin/config/impressao');
+    }
     private static function admPrintHold(): void
     {
         $u = Auth::require('print_config');
@@ -764,7 +780,7 @@ final class App
     // ================= configurações de impressão e estações (QZ Tray) =================
     private static function admStations(string $_ = ""): void
     {
-        self::adm('admin/stations', ['title' => 'Configurações → Impressão', 'ov' => PrintStation::overview(), 'activeNav' => 'print', 'canConfig' => Auth::can('print_config')], 'print');
+        self::adm('admin/stations', ['title' => 'Configurações → Impressão', 'ov' => PrintStation::overview(), 'dests' => Printing::sectors(), 'cats' => Db::all('SELECT c.id, c.name, c.sector, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.hidden = 0) n, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.print_sector IS NOT NULL) exc FROM categories c WHERE c.active = 1 ORDER BY c.sort, c.id'), 'activeNav' => 'print', 'canConfig' => Auth::can('print_config')], 'print');
     }
     private static function admStationCreate(string $_ = ""): void
     {

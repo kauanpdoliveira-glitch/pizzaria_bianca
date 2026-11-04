@@ -33,7 +33,7 @@
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-reprint],[data-retry]'); if (!b) return;
     try {
-      if (b.dataset.reprint !== undefined) { if (!confirm('Enviar nova via à fila de impressão? Será registrado no histórico.')) return; await call(`/admin/api/orders/${b.dataset.order}/reprint`, 'POST', { sector: b.dataset.reprint }); }
+      if (b.dataset.reprint !== undefined) { const reason = (prompt('REIMPRESSÃO — informe o motivo (obrigatório; fica registrado com seu nome):') || '').trim(); if (reason.length < 3) return; await call(`/admin/api/orders/${b.dataset.order}/reprint`, 'POST', { sector: b.dataset.reprint, reason }); }
       else { if (!confirm('Reenviar este trabalho? Se ele pode ter saído no papel, a comanda sairá duplicada.')) return; await call(`/admin/api/print/${b.dataset.retry}/retry`, 'POST'); }
       location.reload();
     } catch (err) { alert(err.message); }
@@ -202,7 +202,7 @@
       let r;
       if (kind === 'next') r = await call(`/admin/api/orders/${o.id}/status`, 'POST', { to: NEXT[o.status][0], version: +o.version, estimate: $('#est') && $('#est').value ? +$('#est').value : undefined });
       else if (kind === 'pay') r = await call(`/admin/api/orders/${o.id}/payment`, 'POST', { to: 'confirmed', version: +o.version });
-      else { const j = await call(`/admin/api/orders/${o.id}/reprint`, 'POST', {}); toast(`${j.jobs.length} trabalho(s) enviado(s) à fila. Aguardando o agente.`); }
+      else { const reason = (prompt('REIMPRESSÃO de todos os destinos — informe o motivo (obrigatório):') || '').trim(); if (reason.length < 3) return; const j = await call(`/admin/api/orders/${o.id}/reprint`, 'POST', { reason }); toast(`${j.jobs.length} trabalho(s) enviado(s) à fila. Aguardando o agente.`); }
       if (r) merge(r.order);
     } catch (e) {
       S.msg = e.status === 409 ? e.message : 'Não foi possível concluir a ação: ' + e.message;

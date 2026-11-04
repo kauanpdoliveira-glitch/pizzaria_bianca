@@ -109,9 +109,9 @@ final class PrintStation
         $map = self::map($id); $sectors = array_keys(array_filter($map, fn($m) => (int)$m['active'] === 1));
         if (!$sectors) return ['pending' => 0, 'old' => 0, 'oldest' => null, 'pages' => 0];
         $ph = implode(',', array_fill(0, count($sectors), '?'));
-        $rows = Db::all("SELECT sector, created_at FROM print_jobs WHERE status = 'queued' AND sector IN ($ph) ORDER BY id", $sectors);
+        $rows = Db::all("SELECT sector, created_at, copies FROM print_jobs WHERE status = 'queued' AND sector IN ($ph) ORDER BY id", $sectors);
         $pages = 0; $old = 0; $limit = time() - self::STALE_JOB_MINUTES * 60;
-        foreach ($rows as $r) { $pages += max(1, (int)($map[$r['sector']]['copies'] ?? 1)); if (strtotime($r['created_at']) < $limit) $old++; }
+        foreach ($rows as $r) { $pages += max(1, (int)(int)($r['copies'] ?? 1)); if (strtotime($r['created_at']) < $limit) $old++; }
         return ['pending' => count($rows), 'old' => $old, 'oldest' => $rows[0]['created_at'] ?? null, 'pages' => $pages];
     }
 
@@ -156,16 +156,16 @@ final class PrintStation
                 Db::exec('DELETE FROM print_station_map WHERE station_id = ? AND sector = ?', [$id, $sector]);
                 Db::insert('print_station_map', ['station_id' => $id, 'sector' => $sector, 'printer_name' => $printer, 'cols' => $cols, 'charset' => $cs, 'cut' => $mode === 'escpos' && !empty($r['cut']) ? 1 : 0,
                     'label' => $t('label', 80), 'manufacturer' => $t('manufacturer', 40), 'model' => $t('model', 60), 'connection' => $conn, 'mode' => $mode, 'paper' => $paper,
-                    'margin' => max(0, min(10, (int)($r['margin'] ?? 0))), 'copies' => max(1, min(5, (int)($r['copies'] ?? 1))), 'active' => !empty($r['active']) || !isset($r['active']) ? 1 : 0, 'notes' => $t('notes', 200)]);
+                    'margin' => max(0, min(10, (int)($r['margin'] ?? 0))), 'copies' => 1, 'active' => !empty($r['active']) || !isset($r['active']) ? 1 : 0, 'notes' => $t('notes', 200)]);
             }
         });
         Auth::audit('print.station.map', "estação #$id");
     }
 
     /** Opções do QZ que o servidor espera para o envio (o signer só aceita estas; o resto precisa ser o padrão da biblioteca). */
-    public static function qzOptions(array $m): array
+    public static function qzOptions(array $m, int $copies = 1): array
     {
-        if (($m['mode'] ?? 'escpos') === 'html') return ['units' => 'mm', 'margins' => 3, 'copies' => max(1, (int)$m['copies']), 'scaleContent' => true];
+        if (($m['mode'] ?? 'escpos') === 'html') return ['units' => 'mm', 'margins' => 3, 'copies' => max(1, $copies), 'scaleContent' => true];
         return [];   // ESC/POS: vias já repetidas nos bytes; opções padrão da biblioteca
     }
 
@@ -191,11 +191,11 @@ final class PrintStation
                 if ($n !== 1) return null;
             }
             $m = $map[$j['sector']];
-            $b = Printing::build($j, ['cols' => (int)$m['cols'], 'charset' => $m['charset'], 'cut' => (bool)$m['cut'], 'mode' => $m['mode'], 'margin' => (int)$m['margin'], 'copies' => (int)$m['copies'], 'paper' => (int)$m['paper'], 'station' => $stationName, 'printer' => $m['printer_name']]);
+            $b = Printing::build($j, ['cols' => (int)$m['cols'], 'charset' => $m['charset'], 'cut' => (bool)$m['cut'], 'mode' => $m['mode'], 'margin' => (int)$m['margin'], 'copies' => max(1, (int)$j['copies']), 'paper' => (int)$m['paper'], 'station' => $stationName, 'printer' => $m['printer_name']]);
             $hash = hash('sha256', $b['bytes']);
             Db::exec('UPDATE print_jobs SET payload_hash = ?, reserved_until = ? WHERE id = ?', [$hash, date('Y-m-d H:i:s', time() + Printing::RESERVE_SECONDS), $j['id']]);
             return ['uuid' => $j['uuid'], 'sector' => $j['sector'], 'kind' => $j['kind'], 'printer' => $m['printer_name'], 'hash' => $hash, 'mode' => $b['mode'],
-                'payload' => $b['mode'] === 'html' ? $b['bytes'] : base64_encode($b['bytes']), 'options' => self::qzOptions($m), 'attempt' => (int)$j['attempts'] + 1];
+                'payload' => $b['mode'] === 'html' ? $b['bytes'] : base64_encode($b['bytes']), 'options' => self::qzOptions($m, max(1, (int)$j['copies'])), 'copies' => max(1, (int)$j['copies']), 'attempt' => (int)$j['attempts'] + 1];
         });
     }
 

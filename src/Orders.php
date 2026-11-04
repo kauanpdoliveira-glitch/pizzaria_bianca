@@ -196,7 +196,7 @@ final class Orders
         $n = Db::exec("UPDATE orders SET $cols WHERE id = ? AND version = ?", [...array_values($set), $id, $version]);
         if ($n !== 1) throw new HttpError(409, 'Este pedido foi alterado por outra pessoa. Atualizamos a tela.', ['order' => self::get($id)]);
         self::event($id, $user, 'status', $o['status'], $to, $reason);
-        if ($to === 'cancelled' && $o['type'] === 'dine_in') Printing::enqueueOrder($id, 'cancel', $user); // avisa o setor que já recebeu o pedido
+        if ($to === 'cancelled') Printing::onCancel($id, $user); // descarta o que não saiu; avisa explicitamente os destinos que já receberam o pedido
         return self::get($id);
     }
 
@@ -276,7 +276,7 @@ final class Orders
             });
         } catch (HttpError $e) { throw $e; }
         self::event($id, $user, 'items', null, null, implode('; ', $log));
-        if ($o['type'] === 'dine_in') Printing::enqueueOrder($id, 'update', $user); // comunica a alteração ao setor
+        Printing::enqueueOrder($id, 'update', $user); // comunica a alteração aos destinos (comanda marcada PEDIDO ALTERADO; nunca como pedido novo)
         return self::get($id);
     }
 

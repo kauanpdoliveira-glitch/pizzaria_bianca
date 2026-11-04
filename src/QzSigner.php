@@ -111,7 +111,7 @@ final class QzSigner
         if (!$m) self::deny('destino sem impressora mapeada');
         $name = is_array($p['printer'] ?? null) ? ($p['printer']['name'] ?? null) : ($p['printer'] ?? null);
         if (!is_string($name) || !hash_equals($m['printer_name'], $name)) self::deny('impressora diferente da mapeada');
-        self::checkOptions((array)($p['options'] ?? []), PrintStation::qzOptions($m));
+        self::checkOptions((array)($p['options'] ?? []), PrintStation::qzOptions($m, max(1, (int)$j['copies'])));
         $d = $p['data'] ?? null;
         if (!is_array($d) || count($d) !== 1 || !is_array($d[0] ?? null)) self::deny('dados de impressão');
         $d = $d[0];

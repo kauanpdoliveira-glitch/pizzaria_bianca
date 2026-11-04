@@ -243,7 +243,8 @@ echo "Impressão\n";
 t('pedido gera trabalhos por setor na fila', function () use ($order, $key, $pid) {
     Db::exec('DELETE FROM print_jobs');
     $r = Orders::create($order([['product_id' => $pid('Café Expresso'), 'qty' => 1]]), $key());
-    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND status = ?', [$r['id'], 'queued']), 2);
+    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND status = ?', [$r['id'], 'queued']), 1);   // balcão; o café (sobremesas, sem destino) vira pendência
+    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND status = ?', [$r['id'], 'unrouted']), 1);
 });
 t('cozinha sem valores, balcão com valores', function () use ($order, $key, $pid) {
     $r = Orders::create($order([['product_id' => $pid('Café Expresso'), 'qty' => 1]]), $key());
@@ -274,7 +275,8 @@ t('job abandonado pelo agente vira "incerta"', function () {
 });
 t('reimpressão gera trabalho identificado e evento auditado', function () use ($u) {
     $oid = (int)Db::val('SELECT MIN(order_id) FROM print_jobs');
-    $ids = Printing::reprint($oid, 'balcao', $u);
+    $ids = Printing::reprint($oid, 'balcao', $u, 'cliente pediu outra via');
+    throws(fn() => Printing::reprint($oid, 'balcao', $u, ''), 422);   // motivo é obrigatório
     eq(Db::val('SELECT kind FROM print_jobs WHERE id = ?', [$ids[0]]), 'reprint');
     $txt = Printing::lines(Orders::get($oid), Db::one('SELECT * FROM print_jobs WHERE id = ?', [$ids[0]]));
     if (!str_contains(implode("\n", array_column($txt, 't')), 'REIMPRESSAO')) throw new Exception('sem marca de reimpressão');
@@ -412,13 +414,17 @@ t('rodadas: só itens novos viram produção; setor correto; reenvio com a mesma
 t('cancelar rodada avisa o setor (impressão "cancel") e itens enviados só mudam por regra com histórico', function () use ($wA, $tbl, $fk, $item, $mgr) {
     $a = Floor::open(['table_id' => $tbl(6), 'name' => 'Gil', 'people' => 1], $wA, $fk());
     $r = Floor::sendRound($a['tab_id'], [$item('Atum', 1, 'Média')], $wA, $fk());
+    Db::exec("UPDATE print_jobs SET status = 'printed' WHERE order_id = ?", [$r['order_id']]);   // já saiu para a produção
     Orders::transition($r['order_id'], 'cancelled', 1, $mgr, 'cliente desistiu');
-    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND kind = 'cancel'", [$r['order_id']]), 1);
+    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND kind = 'cancel'", [$r['order_id']]), 1, 'aviso de cancelamento');   // avisa o destino que já recebeu
+    $rN = Floor::sendRound($a['tab_id'], [$item('Atum', 1, 'Média')], $wA, $fk());
+    Orders::transition($rN['order_id'], 'cancelled', 1, $mgr, 'erro de digitação');   // ainda não impresso: é descartado, sem aviso
+    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND kind = 'cancel'", [$rN['order_id']]), 0); eq(Db::val("SELECT status FROM print_jobs WHERE order_id = ? AND kind = 'original'", [$rN['order_id']]), 'failed');
     eq(Floor::totals($a['tab_id'])['items'], 0); // não conta no consumo
     $r2 = Floor::sendRound($a['tab_id'], [$item('Atum', 1, 'Média')], $wA, $fk());
     $o = Orders::get($r2['order_id']);
     Orders::editItems($r2['order_id'], [['op' => 'qty', 'item_id' => $o['items'][0]['id'], 'qty' => 2]], 1, $mgr);
-    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND kind = 'update'", [$r2['order_id']]), 1);
+    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND kind = 'update'", [$r2['order_id']]), 1, 'aviso de alteração');
     throws(fn() => Orders::setPayment($r2['order_id'], 'confirmed', 2, $mgr), 422); // pagamento do salão é na comanda
 });
 
@@ -822,6 +828,7 @@ t('modo HTML (impressora comum): página escapada, opções esperadas, assinatur
     Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
     $a = PrintStation::create('Casa', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['EPSON L3150']], $u);
     $cfg = ['printer' => 'EPSON L3150', 'mode' => 'html', 'paper' => 210, 'cut' => 1, 'copies' => 2, 'manufacturer' => 'Epson', 'model' => 'L3150 (doméstica)'];
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 2], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);   // vias vêm do destino, uma vez só
     PrintStation::saveMap($a, ['cozinha' => $cfg, 'copa' => $cfg, 'balcao' => $cfg], $u); PrintStation::control($a, 'arm', $u);
     $m = PrintStation::map($a); eq((int)$m['cozinha']['cut'], 0); eq((int)$m['cozinha']['paper'], 210); eq(count($m), 3);   // mesma fila nos 3 destinos; corte ignorado em HTML
     Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]), 'qty' => 1]], ['name' => '<script>alert(1)</script>']), $key());
@@ -837,7 +844,8 @@ t('modo HTML (impressora comum): página escapada, opções esperadas, assinatur
 t('estação parada só imprime TESTE; armar libera pedidos; pausa bloqueia; pendentes antigos podem ser descartados', function () use ($order, $key, $pid, $u) {
     Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
     $a = PrintStation::create('Parada', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['Q1']], $u);
-    PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Q1', 'copies' => 2]], $u);
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 2], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);
+    PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Q1']], $u);
     $sz = (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid('Calabresa')]);
     foreach ([1, 2] as $_) Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sz, 'qty' => 1]]), $key());
     eq(PrintStation::claim($a), null);                                            // não armada: pedidos não saem
@@ -858,7 +866,7 @@ t('cadastro de impressoras: vias repetem o ESC/POS, margem, validações, identi
     eq(PrintStation::get(PrintStation::create('X', $u, 'x y z!'))['code'], 'x-y-z');   // identificador é normalizado
     PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['TM-T20'], 'tab' => 'aaa111'], $u); $h = PrintStation::heartbeat($a, ['qz' => true, 'tab' => 'bbb222'], $u); eq($h['tabs'], 2);
     PrintStation::saveMap($a, ['balcao' => ['printer' => 'TM-T20', 'paper' => 210, 'mode' => 'escpos', 'copies' => 9, 'margin' => 99, 'cols' => 5]], $u);
-    $m = PrintStation::map($a)['balcao']; eq((int)$m['paper'], 80); eq((int)$m['copies'], 5); eq((int)$m['margin'], 10); eq((int)$m['cols'], 48);   // A4 só em HTML; limites; colunas padrão
+    $m = PrintStation::map($a)['balcao']; eq((int)$m['paper'], 80); eq((int)$m['margin'], 10); eq((int)$m['cols'], 48);   // A4 só em HTML; limites; colunas padrão
     $b = PrintFormatter::escpos([['t' => 'x']], ['copies' => 3, 'margin' => 2, 'cut' => true]);
     eq(substr_count($b, "\x1B@"), 3); eq(substr_count($b, "\x1DV"), 3); if (!str_contains($b, '  x')) throw new Exception('margem ausente');
     throws(fn() => PrintStation::saveMap($a, ['cozinha' => ['printer' => 'Fila-Inexistente']], $u), 422);
@@ -884,6 +892,88 @@ t('reter pendentes: nada apagado nem impresso; estação armada não os reserva;
     eq(PrintStation::claim($a)['sector'], 'cozinha');                                       // só o liberado
     throws(fn() => Printing::release($id, $u), 422);
     eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE status = 'held'"), count($before) - 1);
+});
+
+echo "Regras de comandas por destino (entrega e retirada)\n";
+$txtOf = fn(int $oid, string $sector) => preg_replace('/\s+/', ' ', implode("\n", array_column(Printing::lines(Orders::get($oid), Db::one('SELECT * FROM print_jobs WHERE order_id = ? AND sector = ? ORDER BY id LIMIT 1', [$oid, $sector])), 't')));
+$sizeOf = fn(string $n) => (int)Db::val('SELECT id FROM product_sizes WHERE product_id = ? LIMIT 1', [$pid($n)]);
+t('tabela obrigatória: pizza+refri, só pizza, só refri, pizza+porção+refri (1 via por destino); doce sem destino é pendência', function () use ($order, $key, $pid, $secOf, $sizeOf) {
+    Db::exec('DELETE FROM print_jobs');
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);
+    Db::exec("UPDATE categories SET sector = NULL WHERE name LIKE '%obremesa%'"); Printing::forgetCache();
+    $piz = ['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]; $ref = ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]; $por = ['product_id' => $pid('Batata Frita'), 'qty' => 1];
+    $caso = fn(array $items) => $secOf(Orders::create($order($items), $key())['id']);
+    eq($caso([$piz, $ref]), ['balcao', 'copa', 'cozinha']);
+    eq($caso([$piz]), ['balcao', 'cozinha']);
+    eq($caso([$ref]), ['balcao', 'copa']);
+    eq($caso([$piz, $por, $ref]), ['balcao', 'copa', 'cozinha']);
+    $doce = $caso([['product_id' => $pid('Mini Pudim Artesanal'), 'qty' => 1]]);          // sem destino definido: nada vai à cozinha/copa
+    eq($doce, ['balcao', 'sem_destino']);
+    Db::exec("UPDATE categories SET sector = 'copa' WHERE name LIKE '%obremesa%'"); Printing::forgetCache();   // o proprietário define
+    eq($caso([['product_id' => $pid('Mini Pudim Artesanal'), 'qty' => 1]]), ['balcao', 'copa']);
+    Db::exec("UPDATE products SET print_sector = 'cozinha' WHERE name = 'Mini Pudim Artesanal'"); Printing::forgetCache();   // exceção do produto vence a categoria
+    eq($caso([['product_id' => $pid('Mini Pudim Artesanal'), 'qty' => 1]]), ['balcao', 'cozinha']);
+    Db::exec("UPDATE products SET print_sector = NULL WHERE name = 'Mini Pudim Artesanal'"); Printing::forgetCache();
+});
+t('conteúdo: balcão completo (entrega com endereço, pagamento pendente), cozinha sem dados pessoais/valores, copa só bebida; retirada sem endereço', function () use ($order, $key, $pid, $txtOf, $sizeOf) {
+    Db::exec('DELETE FROM print_jobs');
+    $items = [['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 2, 'notes' => 'bem assada'], ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 3]];
+    $r = Orders::create($order($items, ['type' => 'delivery', 'zone_id' => 1, 'street' => 'Rua Das Flores', 'number' => '77', 'reference' => 'portão azul', 'notes' => 'tocar a campainha']), $key());
+    $b = $txtOf($r['id'], 'balcao'); $c = $txtOf($r['id'], 'cozinha'); $p = $txtOf($r['id'], 'copa');
+    foreach (['ENTREGA', 'Maria', '99999-0000', 'Rua Das Flores, 77', 'portão azul', '2x Calabresa', '3x Coca-Cola', 'bem assada', 'tocar a campainha', 'Subtotal', 'Taxa entrega', 'TOTAL', 'PAGAMENTO PENDENTE'] as $x) if (!str_contains($b, $x)) throw new Exception("balcão sem [$x]");
+    foreach (['Maria', '99999', 'Rua Das Flores', 'R$', 'Coca'] as $x) if (str_contains($c, $x)) throw new Exception("cozinha com [$x]");
+    foreach (['2x Calabresa', 'ENTREGA', 'OBSERVAÇÃO: bem assada'] as $x) if (!str_contains($c, $x)) throw new Exception("cozinha sem [$x]");
+    foreach (['Maria', 'Rua Das Flores', 'R$', 'Calabresa', '3x Coca-Cola', 'ENTREGA'] as $x) if (($x[0] === '3' || $x === 'ENTREGA') ? !str_contains($p, $x) : str_contains($p, $x)) throw new Exception("copa inadequada com [$x]");
+    $r2 = Orders::create($order([$items[1]], ['type' => 'pickup']), $key());
+    $b2 = $txtOf($r2['id'], 'balcao'); if (!str_contains($b2, 'RETIRADA') || str_contains($b2, 'Taxa entrega') || str_contains($b2, 'Rua')) throw new Exception('retirada com dados de entrega');
+    Orders::setPayment($r['id'], 'confirmed', 1, ['id' => 1, 'name' => 'Teste']);
+    if (!str_contains($txtOf($r['id'], 'balcao'), 'PAGAMENTO CONFIRMADO')) throw new Exception('pagamento confirmado não aparece');
+});
+t('vias por destino: balcão 2 + cozinha 1 + copa 1 = 4 comandas; vias vêm de UM ponto e não mudam trabalhos já criados', function () use ($order, $key, $pid, $sizeOf, $u) {
+    Db::exec('DELETE FROM print_jobs'); Db::exec('DELETE FROM print_stations');
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 2]]);
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1], ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), $key());
+    $jobs = Db::all('SELECT sector, copies, snap_json, origin FROM print_jobs WHERE order_id = ? ORDER BY sector', [$r['id']]);
+    eq(array_sum(array_column($jobs, 'copies')), 4); eq(count($jobs), 3); eq($jobs[0]['origin'], 'order.created');
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 3], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);   // mudança posterior
+    eq(array_sum(array_column(Db::all('SELECT copies FROM print_jobs WHERE order_id = ?', [$r['id']]), 'copies')), 4);   // trabalhos antigos intactos
+    $a = PrintStation::create('Vias', $u); PrintStation::heartbeat($a, ['qz' => true, 'printers' => ['P']], $u);
+    $m = ['printer' => 'P', 'mode' => 'html', 'paper' => 210]; PrintStation::saveMap($a, ['cozinha' => $m, 'copa' => $m, 'balcao' => $m], $u); PrintStation::control($a, 'arm', $u);
+    $j = PrintStation::claim($a); eq($j['copies'], $j['sector'] === 'balcao' ? 2 : 1); eq($j['options']['copies'], $j['copies']);   // uma só aplicação das vias (opção do QZ)
+    $e = PrintFormatter::escpos([['t' => 'x']], ['copies' => 2, 'cut' => true]); eq(substr_count($e, "\x1DV"), 2);
+    throws(fn() => Printing::saveSectors(['balcao' => ['on' => 1, 'copies' => 0]]), 422); throws(fn() => Printing::saveSectors(['balcao' => ['on' => 1, 'copies' => '1.5']]), 422);
+});
+t('destino desligado não imprime; impressão automática desligada retém; trabalho único por evento e nada novo ao reler o pedido', function () use ($order, $key, $pid, $sizeOf) {
+    Db::exec('DELETE FROM print_jobs');
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 0, 'copies' => 1], 'copa' => ['on' => 0, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1], ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), $key());
+    eq(Db::all('SELECT sector, status FROM print_jobs WHERE order_id = ? ORDER BY sector', [$r['id']]), [['sector' => 'balcao', 'status' => 'queued'], ['sector' => 'cozinha', 'status' => 'held']]);
+    $n = (int)Db::val('SELECT COUNT(*) FROM print_jobs'); Orders::get($r['id']); Orders::list([]); Orders::transition($r['id'], 'accepted', 1, ['id' => 1, 'name' => 'Teste']); Orders::setPayment($r['id'], 'confirmed', 2, ['id' => 1, 'name' => 'Teste']);
+    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs'), $n);   // status/pagamento/abrir o painel não geram vias
+    $k = Orders::create($order([['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), str_repeat('ab', 12))['id']; $c = (int)Db::val('SELECT COUNT(*) FROM print_jobs');
+    eq(Orders::create($order([['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), str_repeat('ab', 12))['duplicate'], true); eq((int)Db::val('SELECT COUNT(*) FROM print_jobs'), $c);   // clique repetido
+    Printing::saveSectors(['cozinha' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'copa' => ['on' => 1, 'auto' => 1, 'copies' => 1], 'balcao' => ['on' => 1, 'auto' => 1, 'copies' => 1]]);
+});
+t('reimpressão por destino: motivo, operador, REIMPRESSÃO; alteração marcada; produção/ESC não vaza observação de cliente', function () use ($order, $key, $pid, $sizeOf, $u, $txtOf) {
+    Db::exec('DELETE FROM print_jobs');
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]]), $key());
+    $ids = Printing::reprint($r['id'], 'cozinha', ['id' => 1, 'name' => 'Operadora Ana'], 'papel rasgado');
+    eq(count($ids), 1); $j = Db::one('SELECT * FROM print_jobs WHERE id = ?', [$ids[0]]); eq($j['sector'], 'cozinha'); eq($j['reason'], 'papel rasgado'); eq($j['origin'], 'reprint');
+    $t = preg_replace('/\s+/', ' ', implode("\n", array_column(Printing::lines(Orders::get($r['id']), $j), 't')));
+    foreach (['REIMPRESSÃO', 'Operadora Ana', 'papel rasgado'] as $x) if (!str_contains($t, $x)) throw new Exception("reimpressão sem [$x]");
+    eq((int)Db::val("SELECT COUNT(*) FROM print_jobs WHERE order_id = ? AND sector = 'balcao'", [$r['id']]), 1);   // só o destino pedido foi reimpresso
+    $o = Orders::get($r['id']); Orders::editItems($r['id'], [['op' => 'qty', 'item_id' => $o['items'][0]['id'], 'qty' => 2]], 1, $u);
+    $up = Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND kind = 'update' AND sector = 'cozinha'", [$r['id']]);
+    if (!$up || !str_contains(implode(' ', array_column(Printing::lines(Orders::get($r['id']), $up), 't')), 'PEDIDO ALTERADO')) throw new Exception('alteração não identificada');
+});
+t('painel: categoria sem destino aparece como pendência; ambiente de testes marca toda folha', function () use ($order, $key, $pid, $sizeOf) {
+    Db::exec("UPDATE categories SET sector = NULL WHERE name LIKE '%obremesa%'"); Printing::forgetCache();
+    if (!str_contains(json_encode(Printing::pendencias(), JSON_UNESCAPED_UNICODE), 'sem destino de impressão')) throw new Exception('pendência da categoria invisível');
+    Db::exec("UPDATE categories SET sector = 'copa' WHERE name LIKE '%obremesa%'"); Printing::forgetCache();
+    $_ENV['APP_ENV'] = 'staging'; Db::exec('DELETE FROM print_jobs');
+    $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1], ['product_id' => $pid('Coca-Cola Lata'), 'qty' => 1]]), $key());
+    foreach (Db::all('SELECT * FROM print_jobs WHERE order_id = ?', [$r['id']]) as $j) if (!str_contains(preg_replace('/\s+/', ' ', implode("\n", array_column(Printing::lines(Orders::get($r['id']), $j), 't'))), 'TESTE — NÃO PRODUZIR')) throw new Exception("folha {$j['sector']} sem marca de teste");
+    unset($_ENV['APP_ENV']);
 });
 
 echo "Hospedagem sem disco persistente\n";
