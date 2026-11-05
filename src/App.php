@@ -446,7 +446,7 @@ final class App
         $sel = null; foreach ($cats as $c) if ((int)$c['id'] === $selId) $sel = $c;
         if (!$sel && $aba !== 'opcoes') { foreach ($cats as $c) if (!$c['parent_id']) { $sel = $c; break; } }
         $prods = $sel ? Db::all('SELECT p.*, (SELECT COUNT(*) FROM product_sizes s WHERE s.product_id = p.id) AS n_sizes, (SELECT MIN(price_cents) FROM product_sizes s WHERE s.product_id = p.id AND s.available = 1) AS min_size FROM products p WHERE p.category_id = ? ORDER BY p.sort, p.id', [$sel['id']]) : [];
-        $sizesUsed = $sel ? array_column(Db::all('SELECT DISTINCT s.name FROM product_sizes s JOIN products p ON p.id = s.product_id WHERE p.category_id = ? ORDER BY s.sort', [$sel['id']]), 'name') : [];
+        $sizesUsed = $sel ? array_column(Db::all('SELECT s.name FROM product_sizes s JOIN products p ON p.id = s.product_id WHERE p.category_id = ? GROUP BY s.name ORDER BY MIN(s.sort), s.name', [$sel['id']]), 'name') : [];
         $groups = [];
         if ($sel) foreach (Db::all('SELECT * FROM option_groups WHERE category_id = ? ORDER BY sort, id', [$sel['id']]) as $g) { $g['options'] = Db::all('SELECT * FROM options WHERE group_id = ? ORDER BY sort, id', [$g['id']]); $groups[] = $g; }
         self::adm('admin/menu', ['title' => 'Catálogo', 'aba' => $aba, 'cats' => $cats, 'sel' => $sel, 'prods' => $prods, 'sizesUsed' => $sizesUsed, 'groups' => $groups, 'newCat' => $aba === 'opcoes' && !empty($_GET['nova']), 'activeNav' => 'menu'], 'menu');
