@@ -408,7 +408,7 @@
         S.known = ids; S.orders = d.orders; S.map = new Map(d.orders.map(o => [o.id, o])); S.rev = d.rev;
         if (S.fetched && S.map.has(S.fetched.id)) S.fetched = null;
       }
-      const c = $('#conn'); c.textContent = 'Atualizado às ' + d.now.slice(11, 16); c.className = 'conn on'; $('#stale').hidden = true;
+      const c = $('#conn'); c.textContent = 'Atualizado às ' + d.now.slice(11, 16) + (window.BiancaRealtime && BiancaRealtime.isUp() ? ' · tempo real' : ''); c.className = 'conn on'; $('#stale').hidden = true;
       const sp = $('#store-pill'); sp.className = 'store-pill ' + (d.store.open ? 'ok' : 'bad'); $('#store-text').textContent = d.store.open ? 'Loja aberta' : (d.store.reason || 'Loja fechada');
       const ai = $('#agent-ic'); ai.className = 'icon-btn ' + ({ online: 'ok', offline: 'bad', never: 'warn' }[d.agent.state]);
       const lbl = d.agent.label + (d.agent.pending ? ` · ${d.agent.pending} na fila` : '') + (d.agent.problems ? ` · ${d.agent.problems} com problema` : ''); ai.title = lbl; ai.setAttribute('aria-label', lbl); $('#agent-txt').textContent = lbl;
@@ -427,10 +427,13 @@
   // Atualização: polling incremental (?rev=) com agenda ÚNICA (sem setInterval concorrente), mais lento em aba oculta,
   // recuo progressivo com jitter após falhas e retomada imediata ao voltar à aba/rede. Um só pedido em voo por vez.
   let pollTimer = null, inflight = false;
-  const nextDelay = () => { const base = document.hidden ? 20000 : 5000; return (S.fails ? Math.min(30000, base * 2 ** Math.min(S.fails, 3)) : base) + Math.random() * 600; };
+  const nextDelay = () => { const base = document.hidden ? 20000 : (window.BiancaRealtime && BiancaRealtime.isUp() ? 30000 : 5000); // canal privado conectado: polling vira só rede de segurança return (S.fails ? Math.min(30000, base * 2 ** Math.min(S.fails, 3)) : base) + Math.random() * 600; };
   const schedule = () => { clearTimeout(pollTimer); pollTimer = setTimeout(tick, nextDelay()); };
   async function tick() { if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); }
   const pollNow = async () => { clearTimeout(pollTimer); if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); };
+  // Realtime (canal privado só de avisos): cada aviso dispara UMA consulta incremental (deduplicada em 150 ms e sem pedidos simultâneos)
+  let pingT = null;
+  if (window.BiancaRealtime) BiancaRealtime.start({ onPing: () => { clearTimeout(pingT); pingT = setTimeout(pollNow, 150); }, onResync: () => pollNow(), onState: s => { S.rt = s; schedule(); } });
   schedule(); setInterval(() => render(), 30000); // 30 s: só atualiza "há X min"
   document.addEventListener('visibilitychange', () => { if (!document.hidden) pollNow(); });
   window.addEventListener('online', pollNow);

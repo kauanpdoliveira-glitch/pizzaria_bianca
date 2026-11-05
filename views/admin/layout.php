@@ -49,6 +49,7 @@ $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidde
 </div></div>
 <script src="<?= View::asset('assets/picker.js') ?>" defer></script>
 <script src="<?= View::asset('assets/ui.js') ?>" defer></script>
+<?php if ($isBoard && Realtime::enabled()): ?><script src="<?= View::asset('assets/realtime.js') ?>" defer></script><?php endif; ?>
 <script src="<?= View::asset('assets/neworder.js') ?>" defer></script>
 <script src="<?= View::asset('assets/admin.js') ?>" defer></script>
 </body></html>

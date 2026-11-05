@@ -38,12 +38,14 @@ final class App
             // estações de impressão (QZ Tray)
             ['GET', '#^/admin/config/impressao/layouts$#', 'admLayouts'], ['POST', '#^/admin/impressao/layout$#', 'admLayoutAction'], ['POST', '#^/admin/api/layout/preview$#', 'apiLayoutPreview'], ['GET', '#^/admin/(estacoes|config/impressao)$#', 'admStations'], ['POST', '#^/admin/(estacoes|config/impressao)$#', 'admStationCreate'], ['POST', '#^/admin/estacoes/(\d+)/mapa$#', 'admStationMap'], ['POST', '#^/admin/estacoes/(\d+)/editar$#', 'admStationEdit'],
             ['POST', '#^/admin/estacoes/(\d+)/ativa$#', 'admStationActive'], ['POST', '#^/admin/estacoes/(\d+)/teste$#', 'admStationTest'], ['GET', '#^/admin/estacao/(\d+)$#', 'admStationRun'],
-            ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign|control|arm-preview)$#', 'apiStation'],
+            ['GET', '#^/admin/api/realtime$#', 'apiRealtime'], ['GET', '#^/admin/api/qz/certificate$#', 'apiQzCert'], ['POST', '#^/admin/api/estacao/(\d+)/(heartbeat|claim|sign|control|arm-preview)$#', 'apiStation'],
             ['POST', '#^/admin/api/estacao/(\d+)/(sending|result)/([0-9a-f-]{36})$#', 'apiStationJob'],
         ];
         foreach ($routes as [$m, $re, $fn]) {
             if ($m === $method && preg_match($re, $path, $mm)) {
                 if ($method === 'POST' && (str_starts_with($path, '/admin') || str_starts_with($path, '/garcom') || $path === '/equipe/sair') && $path !== '/admin/login') Auth::checkCsrf();
+                // alterações (POST) avisam o painel pelo canal privado do Realtime (sem dados); heartbeat/claim/quote/login não alteram o quadro
+                if ($method === 'POST' && Realtime::enabled() && !preg_match('#(/heartbeat|/claim|/arm-preview|/control|/sign|^/api/quote|login|/sair)#', $path)) register_shutdown_function([Realtime::class, 'publish']);
                 self::$fn(...array_slice($mm, in_array($fn, ['loginPage', 'loginPost'], true) ? 2 : 1));
                 return;
             }
@@ -919,6 +921,14 @@ final class App
         if (!$s) throw new HttpError(404, 'Estação não encontrada.');
         header("Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; connect-src 'self' " . QzSigner::CONNECT_SRC);
         self::adm('admin/station', ['title' => 'Estação: ' . $s['name'], 'station' => $s, 'map' => PrintStation::map((int)$id), 'signer' => QzSigner::status(), 'activeNav' => 'print'], 'print|station');
+    }
+    /** Credenciais curtas para o painel assinar o canal PRIVADO de avisos. Só sessões com a permissão "orders". Nunca devolve chaves secretas. */
+    private static function apiRealtime(): void
+    {
+        Auth::require('orders', true);
+        $t = Realtime::enabled() ? Realtime::token() : null;
+        if (!$t) json_out(['enabled' => false]);
+        json_out(['enabled' => true, 'url' => 'wss://' . Realtime::wsHost() . '/realtime/v1/websocket', 'key' => (string)env('SUPABASE_PUBLISHABLE_KEY'), 'token' => $t['token'], 'exp' => $t['exp'], 'topic' => Realtime::TOPIC]);
     }
     private static function apiQzCert(): void
     {
