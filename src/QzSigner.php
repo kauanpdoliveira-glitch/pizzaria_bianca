@@ -39,7 +39,7 @@ final class QzSigner
         $c = self::certificate(); $k = self::privateKey();
         if (!$c || !$k) return ['configured' => false, 'reason' => 'Certificado/chave do QZ não configurados: o QZ Tray pedirá confirmação manual a cada impressão (modo não silencioso).', 'subject' => null, 'expires' => null];
         $x = @openssl_x509_parse($c); $pk = @openssl_pkey_get_private($k);
-        if (!$x || !$pk) return ['configured' => false, 'reason' => 'Certificado ou chave inválidos.', 'subject' => null, 'expires' => null];
+        if (!$x || !$pk) return ['configured' => false, 'reason' => 'Certificado ou chave inválidos (' . (!$x ? 'certificado ilegível, ' . strlen($c) . ' caracteres' : 'chave privada ilegível, ' . strlen($k) . ' caracteres, ' . (str_contains($k, 'BEGIN') ? 'com cabeçalho PEM' : 'sem cabeçalho PEM')) . ').', 'subject' => null, 'expires' => null];
         if (!@openssl_x509_check_private_key($c, $pk)) return ['configured' => false, 'reason' => 'A chave privada não corresponde ao certificado.', 'subject' => null, 'expires' => null];
         return ['configured' => true, 'reason' => 'ok', 'subject' => $x['name'] ?? null, 'expires' => date('d/m/Y', (int)$x['validTo_time_t'])];
     }
