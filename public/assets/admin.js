@@ -334,62 +334,15 @@
   // ---------- busca com debounce ----------
   let qt; $('#q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render(); }, 150); });
 
-  // ---------- novo pedido (balcão/telefone) ----------
-  // Preço, disponibilidade e regras são sempre calculados pelo servidor (/api/quote e POST /admin/api/orders); aqui só se escolhem os itens.
-  const ND = { menu: null, items: [], key: null, busy: false, quoteSeq: 0, last: null };
-  const nd = $('#new-dlg'), ndf = $('#nd-form');
-  const newKey = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now()) + Math.random().toString(16).slice(2)) + 'adm';
-  const ndErr = m => { const e = $('#nd-err'); e.textContent = m || ''; e.hidden = !m; };
-
-  // ---------- seletor de produtos (arquivo picker.js, compartilhado com o salão) ----------
+  // ---------- novo pedido (balcão/telefone): etapas guiadas em neworder.js ----------
+  const nd = $('#new-dlg'), newKey = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now()) + Math.random().toString(16).slice(2)) + 'adm';
   let MENU = null;
   const loadMenu = async () => (MENU = await BiancaPicker.loadMenu());
   const makePicker = (host, onAdd) => { const p = BiancaPicker.make(host, onAdd); return { load() { p.load(); } }; };
-  ND.picker = makePicker($('#nd-picker'), item => { ND.items.push(item); renderItems(); requote(); });
-
-  async function openNew() {
-    ND.items = []; ND.key = newKey(); ndf.reset(); ndErr(''); syncNd();
-    nd.showModal();
-    try { await loadMenu(); } catch { ndErr('Não foi possível carregar o cardápio. Feche e tente de novo.'); return; }
-    ND.picker.load(); renderItems();
-  }
-  function renderItems() {
-    const box = $('#nd-items'), L = ND.last && ND.last.lines;
-    if (!ND.items.length) { box.replaceChildren(h('p', { class: 'muted' }, 'Nenhum item adicionado.')); return; }
-    box.replaceChildren(...ND.items.map((it, i) => { const l = L && L[i];
-      return h('div', { class: 'nd-it' }, h('span', { class: 'grow' }, l ? `${l.qty} × ${l.name}${l.size_name ? ' (' + l.size_name + ')' : ''}` : `${it.qty} × …`, l && l.options.length ? h('small', {}, '+ ' + l.options.map(o => o.name).join(', ')) : null, it.notes ? h('small', { class: 'obs' }, 'Obs.: ' + it.notes) : null),
-        h('b', {}, l ? fmt(l.total_cents) : ''), h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remover item ' + (i + 1), onclick: () => { ND.items.splice(i, 1); renderItems(); requote(); } }, icon('x'))); }));
-  }
-  let rq; function requote() { clearTimeout(rq); rq = setTimeout(doQuote, 200); }
-  async function doQuote() {
-    const seq = ++ND.quoteSeq, tots = $('#nd-tots');
-    if (!ND.items.length) { ND.last = null; tots.replaceChildren(); return; }
-    try {
-      const r = await call('/api/quote', 'POST', { items: ND.items, type: ndf.elements.type.value, zone_id: ndf.elements.zone_id.value || null });
-      if (seq !== ND.quoteSeq) return; ND.last = r; ndErr(''); renderItems();
-      tots.replaceChildren(...[h('div', { class: 'row' }, h('span', {}, 'Subtotal'), h('span', {}, fmt(r.subtotal_cents))),
-        ndf.elements.type.value === 'delivery' ? h('div', { class: 'row' }, h('span', {}, 'Entrega'), h('span', {}, ndf.elements.zone_id.value ? fmt(r.delivery_fee_cents) : 'escolha o bairro')) : null,
-        h('div', { class: 'row total' }, h('span', {}, 'Total'), h('b', {}, fmt(r.total_cents)))].filter(Boolean));
-    } catch (e) { if (seq === ND.quoteSeq) { ND.last = null; ndErr(e.message); } }
-  }
-  function syncNd() { const del = ndf.elements.type.value === 'delivery'; $('#nd-addr').hidden = !del; $('#nd-change').hidden = ndf.elements.payment.value !== 'cash'; }
-  $('#new-btn').addEventListener('click', openNew);
-  $('#nd-close').addEventListener('click', () => nd.close()); $('#nd-cancel').addEventListener('click', () => nd.close());
-  ndf.addEventListener('change', e => { if (e.target.closest('#nd-picker')) return; syncNd(); requote(); });
-  ndf.addEventListener('submit', async ev => {
-    ev.preventDefault(); if (ND.busy) return; ndErr('');
-    if (!ND.items.length) return ndErr('Adicione ao menos um item.');
-    const f = ndf.elements; if (!f.payment.value) return ndErr('Escolha a forma de pagamento.');
-    if (f.type.value === 'delivery' && (!f.zone_id.value || !f.street.value.trim() || !f.number.value.trim())) return ndErr('Para entrega, informe bairro, rua e número.');
-    ND.busy = true; const btn = $('#nd-submit'); btn.disabled = true; btn.textContent = 'Registrando…';
-    try {
-      const r = await call('/admin/api/orders', 'POST', { type: f.type.value, name: f.name.value.trim(), phone: f.phone.value.trim(), zone_id: f.zone_id.value || null, street: f.street.value.trim(), number: f.number.value.trim(),
-        complement: f.complement.value.trim(), payment: f.payment.value, change_for: f.change_for.value.trim(), notes: f.notes.value.trim(), items: ND.items }, { 'Idempotency-Key': ND.key });
-      nd.close(); await poll(); select(r.id); toast(`Pedido #${r.id} registrado e enviado à fila de impressão.`);
-    } catch (e) { ndErr(e.status ? e.message : 'Sem conexão. Nada foi perdido: toque em "Registrar pedido" de novo — não haverá duplicidade.'); }
-    finally { ND.busy = false; btn.disabled = false; btn.textContent = 'Registrar pedido'; }
+  $('#new-btn').addEventListener('click', () => {
+    let zones = [], pays = {}; try { zones = JSON.parse(nd.dataset.zones || '[]'); pays = JSON.parse(nd.dataset.pays || '{}'); } catch (e) { /* segue sem listas */ }
+    BiancaNewOrder.open({ zones, pays, onDone: async r => { await poll(); select(r.id); toast(`Pedido #${r.id} registrado e enviado à fila de impressão.`); } });
   });
-
   // ---------- editar itens (antes de pronto, com pagamento pendente; o servidor recalcula e registra no histórico) ----------
   const ei = $('#items-dlg'), eif = $('#items-form'), EI = { o: null, rows: [], added: [], quoted: null, busy: false, seq: 0 };
   const eiErr = m => { const e = $('#ei-err'); e.textContent = m || ''; e.hidden = !m; };

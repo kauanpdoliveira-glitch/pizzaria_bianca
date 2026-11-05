@@ -26,7 +26,7 @@ $_ENV['MAIL_LOG_DIR'] = sys_get_temp_dir() . '/bianca-mail-suite-' . bin2hex(ran
 Db::migrate();
 require __DIR__ . '/../database/seed_menu.php';
 Db::exec("INSERT INTO delivery_zones (name, fee_cents, min_order_cents, active) VALUES ('Centro', 800, 3000, 1), ('Inativo', 0, 0, 0)");
-Settings::set('schedule', json_encode(array_fill(0, 7, [['00:00', '23:59']])));
+Settings::set('schedule', json_encode(array_fill(0, 7, [['00:00', '24:00']])));
 $u = ['id' => 1, 'name' => 'Teste'];
 Db::insert('users', ['name' => 'Teste', 'email' => 't@t.com', 'password_hash' => 'x', 'role' => 'manager', 'active' => 1, 'created_at' => now()]);
 

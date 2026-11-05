@@ -20,37 +20,7 @@
     <aside class="detail" id="detail" aria-label="Detalhes do pedido" aria-live="polite"></aside>
   </div>
 </div>
-<dialog id="new-dlg" class="wide" aria-labelledby="nd-title">
-  <form id="nd-form" novalidate>
-    <div class="nd-head"><h2 id="nd-title">Novo pedido (balcão ou telefone)</h2><button class="icon-btn" type="button" id="nd-close" aria-label="Fechar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
-    <div class="nd-grid">
-      <section class="nd-col" aria-label="Itens">
-        <h3>Itens</h3>
-        <div id="nd-picker"></div>
-        <div id="nd-items" class="nd-items"><p class="muted">Nenhum item adicionado.</p></div>
-      </section>
-      <section class="nd-col" aria-label="Cliente e pagamento">
-        <h3>Atendimento</h3>
-        <div class="seg"><label><input type="radio" name="type" value="pickup" checked><span>Retirada / balcão</span></label><label><input type="radio" name="type" value="delivery"><span>Entrega</span></label></div>
-        <label>Nome (opcional — em branco = "Balcão")<input name="name" maxlength="120" autocomplete="off"></label>
-        <label>Telefone com DDD (opcional)<input name="phone" type="tel" inputmode="tel" autocomplete="off"></label>
-        <div id="nd-addr" hidden>
-          <label>Bairro atendido<select name="zone_id"><option value="">Selecione</option><?php foreach ($zones as $z): ?><option value="<?= (int)$z['id'] ?>"><?= e($z['name']) ?> — taxa <?= e(money((int)$z['fee_cents'])) ?></option><?php endforeach; ?></select></label>
-          <div class="inline"><label>Rua<input name="street" maxlength="160"></label><label class="xs">Número<input name="number" maxlength="20"></label></div>
-          <label>Complemento / referência<input name="complement" maxlength="120"></label>
-          <?php if (!$zones): ?><p class="note">Nenhum bairro cadastrado: cadastre em Configurações para usar entrega.</p><?php endif; ?>
-        </div>
-        <label>Forma de pagamento<select name="payment"><option value="">Selecione</option><?php foreach ($pays as $k => $p): ?><option value="<?= e($k) ?>"><?= e($p['label']) ?></option><?php endforeach; ?></select></label>
-        <label id="nd-change" hidden>Troco para (opcional)<input name="change_for" inputmode="decimal"></label>
-        <label>Observações do pedido<textarea name="notes" rows="2" maxlength="300"></textarea></label>
-        <div class="tots" id="nd-tots" aria-live="polite"></div>
-        <p class="muted small">O pagamento fica "pendente" até a equipe conferir. Este cadastro ignora o horário e a pausa da loja.</p>
-      </section>
-    </div>
-    <p id="nd-err" class="banner bad" role="alert" hidden></p>
-    <div class="actions"><button class="b ghost" type="button" id="nd-cancel">Cancelar</button><button class="b" type="submit" id="nd-submit">Registrar pedido</button></div>
-  </form>
-</dialog>
+<dialog id="new-dlg" class="no-dlg" aria-label="Novo pedido" data-zones="<?= e(json_encode(array_map(fn($z) => ['id' => (int)$z['id'], 'name' => $z['name'], 'fee_cents' => (int)$z['fee_cents']], $zones), JSON_UNESCAPED_UNICODE)) ?>" data-pays="<?= e(json_encode(array_map(fn($p) => ['label' => $p['label']], array_filter($pays, fn($p) => !empty($p['on']))), JSON_UNESCAPED_UNICODE)) ?>"></dialog>
 <dialog id="items-dlg" class="wide" aria-labelledby="ei-title">
   <form id="items-form" novalidate>
     <div class="nd-head"><h2 id="ei-title">Editar itens</h2><button class="icon-btn" type="button" id="ei-close" aria-label="Fechar"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button></div>
