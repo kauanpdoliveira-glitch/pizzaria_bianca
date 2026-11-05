@@ -5,7 +5,7 @@
 <li>Servidor: <b id="st-srv">aguardando…</b> · Abas: <span id="st-tabs">—</span></li>
 <li>QZ Tray: <b id="st-qz">desconectado</b> <span id="st-qzver" class="muted"></span></li>
 <li>Processamento: <b id="st-armed">parado</b> · Administração: <b id="st-paused"><?= $station['paused'] ? 'PAUSADA pelo administrador' : 'ativa' ?></b></li>
-<li>Assinatura: <b><?= $signer['configured'] ? 'ativa (silencioso só se o QZ confiar no certificado)' : 'sem certificado próprio: o QZ vai pedir confirmação manual — isto NÃO é impressão silenciosa' ?></b></li>
+<li>Assinatura: <b><?= $signer['configured'] ? 'ativa (silencioso só se o QZ confiar no certificado)' : 'sem certificado próprio: o QZ vai pedir confirmação manual — isto NÃO é impressão silenciosa' ?></b><?php if (!$signer['configured']): ?> <small>(<?= e($signer['reason']) ?>)</small><?php endif; ?></li>
 <li>Filas vistas pelo QZ: <span id="st-printers" class="muted">—</span></li>
 <li>Trabalho atual: <b id="st-job">nenhum</b></li>
 </ul>
