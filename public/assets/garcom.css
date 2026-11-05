@@ -43,3 +43,6 @@ body.gw{background:#fff;max-width:640px;margin:0 auto}
 @media(prefers-reduced-motion:reduce){.trow,.step button,.pick,.gtabs button,.gbtn,#gtoast{transition:none}.trow:active,.pick:active,.gbtn:active{transform:none}}
 
 @media(max-width:800px),(pointer:coarse){.b.sm,.b.ghost.sm{min-height:44px}}
+
+/* respiro lateral fluido (mesmo critério do site) */
+.ghdr{padding-left:max(clamp(18px,5vw,24px),env(safe-area-inset-left));padding-right:max(clamp(18px,5vw,24px),env(safe-area-inset-right))}.gmain{padding:16px max(clamp(18px,5vw,24px),env(safe-area-inset-left)) 96px max(clamp(18px,5vw,24px),env(safe-area-inset-right))}.gmain h1,.gmain p,.gmain li{overflow-wrap:break-word}

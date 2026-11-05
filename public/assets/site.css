@@ -4,11 +4,11 @@
 :root{
   --red:#c4121f;--red-d:#9f0d18;--red-l:#fbe9ea;--ink:#1d1412;--muted:#665750;--paper:#fff;--paper2:#f8f3ee;--line:#e5dbd2;--ok:#1f7a3d;--err:#b3261e;
   --display:Oswald,"Arial Narrow","Roboto Condensed",Impact,sans-serif;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--serif:Georgia,"Times New Roman",serif;
-  --r:8px;--gut:16px;--header-h:76px;--max:1120px;--sp-section:clamp(48px,8vw,88px);
+  --r:8px;--gut:clamp(20px,5.5vw,40px);--header-h:76px;--max:1120px;--sp-section:clamp(48px,8vw,88px);
 }
 *{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
-body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans);overflow-x:hidden}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 var(--sans)}
 img{max-width:100%;height:auto;display:block}a{color:var(--red)}
 :focus-visible{outline:3px solid #0b57d0;outline-offset:2px;border-radius:4px}
 .skip{position:absolute;left:-999px;top:0;background:#fff;color:#000;padding:.6rem 1rem;z-index:100}.skip:focus{left:8px;top:8px}
@@ -224,3 +224,27 @@ html{scroll-padding-top:calc(var(--header-h) + 12px)}
 /* deslocamentos laterais e zoom das revelações nunca criam rolagem horizontal; alvos de toque ≥ 44 px */
 main{overflow-x:clip}
 @media(min-width:760px) and (max-width:1100px),(min-width:760px) and (pointer:coarse){.nav>a:not(.btn){min-height:44px;display:inline-flex;align-items:center}}
+/* ===== Responsividade: respiro lateral fluido, quebra de texto e largura de leitura (sem overflow-x global) ===== */
+/* --gut cresce com a tela (20 px em 360, ~24 px em 430, 40 px em tablets/desktop); áreas seguras do aparelho respeitadas */
+.wrap,.narrow{width:min(var(--max),100% - 2 * max(var(--gut),env(safe-area-inset-left),env(safe-area-inset-right)))}
+.top,.hero,.page-hero,.chips,.cartbar{padding-left:max(var(--gut),env(safe-area-inset-left));padding-right:max(var(--gut),env(safe-area-inset-right))}
+.cta-band .copy{padding-left:max(var(--gut),env(safe-area-inset-left));padding-right:max(var(--gut),env(safe-area-inset-right))}
+h1,h2,h3,h4,p,li,dd,dt,label,figcaption,legend,summary{overflow-wrap:break-word;hyphens:manual}
+h1,h2,h3{text-wrap:balance}p,li,.lead,figcaption{text-wrap:pretty}
+.brk{display:inline}@media(min-width:600px){.brk{display:block}}
+.hero .lead{max-width:30em;font-size:clamp(1rem,.94rem + .35vw,1.15rem);line-height:1.55}
+.hero h1{margin-bottom:.4em}.hero .cta-row{margin-top:22px}
+.lede{font-size:clamp(1.02rem,.96rem + .3vw,1.15rem)}.prose,.page-hero p,.contact p,.foot p{max-width:40em}
+.sec-title{padding-inline:0}.sec-title h2{min-width:0}
+.prod{padding:14px}.prod>:last-child{min-width:0}.prod h3,.prod p{overflow-wrap:anywhere}
+.row>*,.line>*,.opt>span,.summary .row>*{min-width:0}.row{align-items:baseline}
+fieldset{padding:14px 16px;min-inline-size:0}.f input,.f select,.f textarea{max-width:100%}
+.btn{text-align:center;max-width:100%;line-height:1.2;padding-block:10px}
+.toast{max-width:calc(100vw - 2 * var(--gut))}
+a,button{overflow-wrap:anywhere}
+@media(max-width:380px){.top{gap:8px}.top .btn-sm{padding:0 14px}.prod{gap:12px}.prod img,.prod .ph{width:84px;height:84px}}
+@media(max-width:759px){.sec{padding-block:clamp(36px,9vw,56px)}.cta-band .copy{padding-block:40px}.facts div{padding:16px 8px}}
+/* zoom de 200% em celular (viewport efetivo ~180-300 px): o cabeçalho quebra em linhas em vez de vazar */
+.top>*{min-width:0}.brand img{max-width:100%}@media(max-width:300px){.top{height:auto;min-height:var(--header-h);flex-wrap:wrap;row-gap:6px;padding-block:8px}.nav{flex-wrap:wrap;gap:6px;justify-content:flex-start}.nav .btn-sm{padding:0 12px;font-size:.9rem}.hero h1{font-size:1.9rem}.btn{padding-inline:18px}}
+@media(max-width:300px){.facts{grid-template-columns:1fr}.facts div,.facts div:nth-child(odd){border-left:0}.facts div:nth-child(-n+2){border-top:1px solid var(--line)}.facts div:first-child{border-top:0}.facts b{font-size:2rem}.cats{grid-template-columns:1fr}.tile span{font-size:1.15rem}}
+@media(max-width:300px){.mnav div{position:static;min-width:0;margin-top:6px;box-shadow:none}.nav{width:100%}}.mnav div{max-width:calc(100vw - 2 * var(--gut))}

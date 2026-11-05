@@ -1,6 +1,6 @@
 <section class="hero" aria-labelledby="h1">
   <p class="eyebrow" style="color:#fff">Contagem · Minas Gerais</p>
-  <h1 id="h1">Pizzaria Bianca.<br>Tradição desde 1977.</h1>
+  <h1 id="h1">Pizzaria Bianca. <span class="brk">Tradição desde 1977.</span></h1>
   <p class="lead">Do Centro de Contagem para a sua mesa: peça pelo site e receba em casa ou retire no balcão.</p>
   <div class="cta-row"><a class="btn btn-light" href="/cardapio">Fazer pedido</a><a class="btn btn-line" href="/historia">Nossa história</a></div>
   <p class="status-pill <?= $status['open'] ? 'on' : 'off' ?>"><span class="dot"></span><?= $status['open'] ? 'Recebendo pedidos agora' : e($status['reason'] ?: 'Fechados no momento') ?></p>
@@ -30,7 +30,7 @@
 </section>
 
 <section class="cta-band" style="margin-top:var(--sp-section)">
-  <div class="copy"><h2>Peça sua pizza<br>agora mesmo</h2><p>Escolha tamanho, sabores e borda, e acompanhe o pedido até a sua casa.</p><a class="btn btn-light" href="/cardapio">Fazer pedido</a></div>
+  <div class="copy"><h2>Peça sua pizza <span class="brk">agora mesmo</span></h2><p>Escolha tamanho, sabores e borda, e acompanhe o pedido até a sua casa.</p><a class="btn btn-light" href="/cardapio">Fazer pedido</a></div>
   <img src="/assets/img/pizza-calabresa.jpg" alt="Pizza de calabresa na frigideira de ferro" loading="lazy" width="900" height="600">
 </section>
 
