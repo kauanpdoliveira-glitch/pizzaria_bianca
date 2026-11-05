@@ -8,6 +8,7 @@ final class Settings
     /** Valores padrão. Horário e telefone/endereço vêm do PDF/Instagram; o resto é neutro e deve ser definido pela gerente. */
     public const DEFAULTS = [
         'orders_open' => '1',
+        'auto_accept' => '1',          // aceita no servidor o pedido válido do site (pagamento na entrega/retirada)
         'delivery_enabled' => '1',
         'pickup_enabled' => '1',
         'estimate_delivery_min' => '60',

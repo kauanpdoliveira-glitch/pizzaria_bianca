@@ -262,7 +262,7 @@
   // ---------- renderização geral ----------
   function render(forceDetail) {
     const list = renderFilters(); renderList(list); renderDetail(forceDetail); renderLeave(list);
-    const nNew = S.orders.filter(o => o.status === 'received').length, bn = $('#bell-n');
+    const nNew = S.orders.filter(o => o.status === 'received' || S.fresh.has(o.id)).length, bn = $('#bell-n');
     bn.hidden = nNew === 0; bn.textContent = nNew;
     $('#sound').setAttribute('aria-label', (S.sound ? 'Alerta sonoro ativo' : 'Alerta sonoro desativado. Ativar') + (nNew ? `. ${nNew} pedidos novos` : ''));
     board.classList.toggle('stale', stale());
@@ -279,17 +279,58 @@
     el.hidden = false;
   }
 
-  // ---------- alerta sonoro (precisa de clique do operador) ----------
-  const beep = () => {
-    if (!S.sound || !ctx) return;
-    [0, 0.22, 0.44].forEach(t => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.25, ctx.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.18); o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.2); });
-  };
-  $('#sound').addEventListener('click', e => {
-    S.sound = !S.sound;
-    if (S.sound) { ctx = ctx || new (window.AudioContext || window.webkitAudioContext)(); ctx.resume(); beep(); }
-    e.currentTarget.setAttribute('aria-pressed', S.sound); e.currentTarget.querySelector('use').setAttribute('href', S.sound ? '#i-bell' : '#i-bell-off'); render();
-  });
-
+  // ---------- alerta sonoro (o navegador exige um clique inicial; a aba precisa ficar aberta) ----------
+  const LS = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* sem armazenamento: segue sem memória */ } } };
+  S.volume = Math.min(1, Math.max(0.05, Number(LS.get('bianca.vol', 0.7)) || 0.7)); S.wantSound = LS.get('bianca.sound', false) === true;
+  const audioState = () => !ctx ? (S.wantSound ? 'blocked' : 'off') : (ctx.state === 'running' ? (S.sound ? 'on' : 'off') : 'blocked');
+  function bell(vol) {
+    if (!ctx || ctx.state !== 'running') return false;
+    const v = (vol == null ? S.volume : vol);
+    [0, 0.9].forEach(t0 => [[1, 1], [2.76, 0.45], [5.4, 0.2]].forEach(([m, a]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime + t0;
+      o.type = 'sine'; o.frequency.value = 1046.5 * m; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35 * a * v, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+      o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 1.6);
+    }));
+    return true;
+  }
+  const beep = () => S.sound && bell();
+  const bar = h('div', { class: 'soundbar', role: 'group', 'aria-label': 'Som dos pedidos' });
+  const sbTxt = h('span', { class: 'sb-txt', 'aria-live': 'polite' });
+  const sbOn = h('button', { class: 'b sm', type: 'button' }, 'Ativar som dos pedidos');
+  const sbTest = h('button', { class: 'b ghost sm', type: 'button' }, 'Testar som');
+  const sbVol = h('input', { type: 'range', min: '5', max: '100', value: String(Math.round(S.volume * 100)), 'aria-label': 'Volume do alerta' });
+  bar.append(sbOn, sbTest, h('label', { class: 'sb-vol' }, 'Volume ', sbVol), sbTxt);
+  board.parentNode.insertBefore(bar, board);
+  function drawSound() {
+    const st = audioState();
+    sbTxt.textContent = st === 'on' ? 'Som ativado. Mantenha esta aba aberta; com o navegador fechado ou o computador suspenso não há som.' : st === 'blocked' ? 'Som bloqueado pelo navegador: clique em “Ativar som dos pedidos”.' : 'Som desativado.';
+    sbOn.textContent = st === 'on' ? 'Desativar som' : 'Ativar som dos pedidos'; sbOn.hidden = false;
+    const ic = $('#sound'); ic.setAttribute('aria-pressed', st === 'on'); ic.querySelector('use').setAttribute('href', st === 'on' ? '#i-bell' : '#i-bell-off');
+  }
+  async function enableSound() {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    try { await ctx.resume(); } catch (e) { /* fica bloqueado */ }
+    S.sound = ctx.state === 'running'; S.wantSound = S.sound; LS.set('bianca.sound', S.sound); if (S.sound) bell(); drawSound(); render();
+  }
+  function toggleSound() { if (S.sound) { S.sound = false; S.wantSound = false; LS.set('bianca.sound', false); drawSound(); render(); } else enableSound(); }
+  sbOn.addEventListener('click', toggleSound); $('#sound').addEventListener('click', toggleSound);
+  sbTest.addEventListener('click', async () => { if (!S.sound) await enableSound(); else bell(); });
+  sbVol.addEventListener('input', () => { S.volume = sbVol.value / 100; LS.set('bianca.vol', S.volume); });
+  sbVol.addEventListener('change', () => bell());
+  document.addEventListener('pointerdown', () => { if (S.wantSound && !S.sound) enableSound(); }, { once: false, passive: true }); // 1º clique em qualquer lugar reativa o que o operador já tinha ligado
+  drawSound();
+  // notificação sem repetir: memória compartilhada entre abas (localStorage) + aviso de pedidos perdidos numa desconexão
+  const seenIds = () => new Set(LS.get('bianca.notified', []));
+  function claim(ids) { const s = seenIds(); const mine = ids.filter(i => !s.has(i)); if (!mine.length) return []; mine.forEach(i => s.add(i)); LS.set('bianca.notified', [...s].slice(-400)); return mine; }
+  function notifyNew(orders, first) {
+    const cand = orders.filter(o => o.origin !== 'manual' && (o.status === 'received' || o.status === 'accepted')).map(o => o.id);
+    if (first && LS.get('bianca.notified', null) === null) { claim(orders.map(o => o.id)); return; } // primeira vez neste navegador: não toca o histórico
+    const mine = claim(cand); if (!mine.length) return;
+    mine.forEach(id => { S.fresh.set(id, Date.now()); setTimeout(() => { S.fresh.delete(id); render(); }, 8000); });
+    beep();
+    S.msg = first && mine.length ? `${mine.length} pedido(s) chegaram enquanto este painel estava fechado ou desconectado.` : S.msg;
+    document.title = `(${mine.length}) Novo pedido — Painel Bianca`; setTimeout(() => document.title = 'Pedidos — Painel Bianca', 8000);
+  }
   // ---------- busca com debounce ----------
   let qt; $('#q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render(); }, 150); });
 
@@ -406,7 +447,7 @@
       if (my !== S.pollSeq) return; // chegou uma resposta mais nova: descarta esta
       S.fails = 0; S.lastOk = Date.now(); S.serverNow = parse(d.now); S.polledAt = Date.now(); S.store = d.store; S.agent = d.agent;
       const ids = new Set(d.orders.map(o => o.id));
-      if (S.known) { const fresh = d.orders.filter(o => !S.known.has(o.id) && o.status === 'received'); if (fresh.length) { fresh.forEach(o => { S.fresh.set(o.id, Date.now()); setTimeout(() => { S.fresh.delete(o.id); render(); }, 8000); }); beep(); document.title = `(${fresh.length}) Novo pedido — Painel Bianca`; setTimeout(() => document.title = 'Pedidos — Painel Bianca', 8000); } }
+      notifyNew(d.orders, !S.known);
       S.known = ids; S.orders = d.orders; S.map = new Map(d.orders.map(o => [o.id, o]));
       if (S.fetched && S.map.has(S.fetched.id)) S.fetched = null;
       const c = $('#conn'); c.textContent = 'Atualizado às ' + d.now.slice(11, 16); c.className = 'conn on'; $('#stale').hidden = true;

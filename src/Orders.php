@@ -88,6 +88,7 @@ final class Orders
                     'status' => 'received', 'version' => 1, 'notes' => mb_substr(trim((string)($in['notes'] ?? '')), 0, 300) ?: null,
                     'estimate_minutes' => $est ?: null, 'origin' => $manualBy ? 'manual' : 'web', 'created_at' => now(), 'updated_at' => now(),
                 ], $q['lines'], $manualBy ? 'Pedido cadastrado manualmente (balcão/telefone)' : 'Pedido recebido pelo site', $manualBy);
+                if (!$manualBy) self::autoAccept($oid, $pay);
                 return ['id' => $oid, 'token' => $token, 'duplicate' => false];
             });
         } catch (PDOException $ex) {
@@ -99,6 +100,17 @@ final class Orders
         }
         app_log("order #{$res['id']} created");
         return $res;
+    }
+
+    /**
+     * Aceitação automática no servidor (dentro da mesma transação do pedido). Só pedidos do site com pagamento na entrega/retirada:
+     * forma marcada como online (se um dia existir) só avança com o pagamento confirmado. Nunca marca pagamento como recebido.
+     */
+    private static function autoAccept(int $oid, array $pay): void
+    {
+        if (Settings::get('auto_accept') !== '1' || !empty($pay['online'])) return;
+        $n = Db::exec("UPDATE orders SET status = 'accepted', version = version + 1, updated_at = ? WHERE id = ? AND status = 'received' AND tab_id IS NULL", [now(), $oid]);
+        if ($n === 1) self::event($oid, null, 'status', 'received', 'accepted', 'Aceito automaticamente pelo servidor (pedido do site)');
     }
 
     /**
@@ -172,8 +184,42 @@ final class Orders
             $p[] = ctype_digit($q) ? (int)$q : 0; $p[] = '%' . $f['q'] . '%'; $p[] = '%' . normalize_phone($f['q']) . '%';
         }
         $sql = 'SELECT * FROM orders' . ($w ? ' WHERE ' . implode(' AND ', $w) : '') . ' ORDER BY id DESC LIMIT ' . (int)$limit;
-        $rows = Db::all($sql, $p);
-        return array_map(fn($o) => self::hydrate($o), $rows);
+        return self::hydrateMany(Db::all($sql, $p));
+    }
+
+    /** Hidrata vários pedidos com 3 consultas no total (itens, opções, eventos), em vez de 2+N por pedido. */
+    public static function hydrateMany(array $orders): array
+    {
+        if (!$orders) return [];
+        $ids = array_map(fn($o) => (int)$o['id'], $orders);
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $items = []; $byItem = [];
+        foreach (Db::all("SELECT * FROM order_items WHERE order_id IN ($ph) ORDER BY id", $ids) as $it) { $it['options'] = []; $items[(int)$it['order_id']][] = $it; }
+        $iids = [];
+        foreach ($items as $list) foreach ($list as $it) $iids[] = (int)$it['id'];
+        $opts = [];
+        if ($iids) {
+            $pi = implode(',', array_fill(0, count($iids), '?'));
+            foreach (Db::all("SELECT item_id, group_name, option_name, price_cents FROM order_item_options WHERE item_id IN ($pi) ORDER BY id", $iids) as $x) $opts[(int)$x['item_id']][] = ['group_name' => $x['group_name'], 'option_name' => $x['option_name'], 'price_cents' => $x['price_cents']];
+        }
+        $events = [];
+        foreach (Db::all("SELECT * FROM order_events WHERE order_id IN ($ph) ORDER BY id", $ids) as $e) $events[(int)$e['order_id']][] = $e;
+        foreach ($orders as &$o) {
+            $oid = (int)$o['id']; $list = $items[$oid] ?? [];
+            foreach ($list as &$it) $it['options'] = $opts[(int)$it['id']] ?? [];
+            unset($it);
+            $o['items'] = $list; $o['events'] = $events[$oid] ?? [];
+        }
+        unset($o);
+        return $orders;
+    }
+
+    /** Pedidos do quadro da gestão: ativos + concluídos/cancelados de hoje, em uma única consulta. */
+    public static function board(int $activeLimit = 150): array
+    {
+        $today = date('Y-m-d');
+        $rows = Db::all("SELECT * FROM orders WHERE status NOT IN ('completed','cancelled') OR (created_at >= ? AND created_at <= ?) ORDER BY id DESC LIMIT " . ($activeLimit + 100), [$today . ' 00:00:00', $today . ' 23:59:59']);
+        return self::hydrateMany($rows);
     }
 
     /**

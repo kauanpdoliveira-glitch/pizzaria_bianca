@@ -363,10 +363,7 @@ final class App
     private static function admApiOrders(): void
     {
         Auth::require('orders', true);
-        $orders = Orders::list(['active' => true], 150);
-        // concluídos/cancelados de hoje, para a coluna final
-        $done = array_values(array_filter(Orders::list(['from' => date('Y-m-d'), 'to' => date('Y-m-d')], 100), fn($o) => in_array($o['status'], ['completed', 'cancelled'], true)));
-        json_out(['now' => now(), 'orders' => self::withJobs(array_merge($orders, $done)), 'store' => Settings::storeStatus(), 'agent' => Printing::agentState()]);
+        json_out(['now' => now(), 'orders' => self::withJobs(Orders::board(150)), 'store' => Settings::storeStatus(), 'agent' => Printing::agentState()]);
     }
     /** Pedido de balcão/telefone cadastrado pelo operador. Mesmas regras de preço do pedido público; ignora horário/pausa da loja. */
     private static function admApiCreateOrder(): void
@@ -396,7 +393,9 @@ final class App
         }
         $cust = array_values(array_unique(array_map(fn($o) => (int)$o['customer_id'], $orders))); $cnt = [];
         if ($cust) { $ph = implode(',', array_fill(0, count($cust), '?')); foreach (Db::all("SELECT customer_id, COUNT(*) AS n FROM orders WHERE customer_id IN ($ph) GROUP BY customer_id", $cust) as $r) $cnt[$r['customer_id']] = (int)$r['n']; }
-        return array_map(function ($o) use ($by, $cnt) { unset($o['idempotency_key']); $o['jobs'] = $by[$o['id']] ?? []; $o['customer_orders'] = $cnt[$o['customer_id']] ?? 1; $o['tab_physical'] = $o['tab_id'] ? Db::val('SELECT physical_number FROM tabs WHERE id = ?', [$o['tab_id']]) : null; return $o; }, $orders);
+        $tabIds = array_values(array_unique(array_map(fn($o) => (int)$o['tab_id'], array_filter($orders, fn($o) => !empty($o['tab_id']))))); $phys = [];
+        if ($tabIds) { $ph = implode(',', array_fill(0, count($tabIds), '?')); foreach (Db::all("SELECT id, physical_number FROM tabs WHERE id IN ($ph)", $tabIds) as $r) $phys[(int)$r['id']] = $r['physical_number']; }
+        return array_map(function ($o) use ($by, $cnt, $phys) { unset($o['idempotency_key']); $o['jobs'] = $by[$o['id']] ?? []; $o['customer_orders'] = $cnt[$o['customer_id']] ?? 1; $o['tab_physical'] = $o['tab_id'] ? ($phys[(int)$o['tab_id']] ?? null) : null; return $o; }, $orders);
     }
     private static function admApiStatus(string $id): void
     {
@@ -672,7 +671,7 @@ final class App
         Auth::require('settings');
         $in = $_POST;
         $flag = fn($k) => !empty($in[$k]) ? '1' : '0';
-        foreach (['orders_open', 'delivery_enabled', 'pickup_enabled'] as $k) Settings::set($k, $flag($k));
+        foreach (['orders_open', 'auto_accept', 'delivery_enabled', 'pickup_enabled'] as $k) Settings::set($k, $flag($k));
         foreach (['estimate_delivery_min', 'estimate_pickup_min'] as $k) Settings::set($k, (string)max(0, min(600, (int)($in[$k] ?? 0))));
         foreach (['store_phone', 'store_address', 'store_whatsapp', 'instagram_url', 'links_url', 'pix_instructions'] as $k) Settings::set($k, mb_substr(trim((string)($in[$k] ?? '')), 0, 400));
         Settings::set('half_rule', ($in['half_rule'] ?? '') === 'highest' ? 'highest' : 'average');

@@ -15,6 +15,7 @@ function t(string $name, callable $fn): void
     catch (Throwable $e) { $fail++; echo "  FAIL $name -> " . get_class($e) . ': ' . $e->getMessage() . "\n"; }
 }
 function eq($a, $b, string $m = ''): void { if ($a !== $b) throw new Exception(($m ? "$m: " : '') . 'esperado ' . var_export($b, true) . ', obtido ' . var_export($a, true)); }
+function ok($c, string $m = ''): void { if (!$c) throw new Exception($m ?: 'condição falsa'); }
 function throws(callable $f, int $status): void
 {
     try { $f(); } catch (HttpError $e) { eq($e->status, $status, 'status HTTP: ' . $e->getMessage()); return; }
@@ -82,6 +83,38 @@ t('produto indisponível é recusado', function () use ($pid) {
 t('preço enviado pelo cliente é ignorado', function () use ($pid) {
     $q = Pricing::quote([['product_id' => $pid('Café Expresso'), 'qty' => 1, 'price_cents' => 1, 'unit_price_cents' => 1]]);
     eq($q['subtotal'], 790);
+});
+
+echo "Aceitação automática\n";
+t('auto: pedido do site é aceito no servidor, com evento de origem, pagamento pendente e fila de impressão', function () use ($order, $key, $pid) {
+    Settings::set('auto_accept', '1');
+    $r = Orders::create($order([['product_id' => $pid('Batata Frita'), 'qty' => 1]]), $key());
+    $o = Orders::get($r['id']);
+    eq($o['status'], 'accepted'); eq((int)$o['version'], 2); eq($o['payment_status'], 'pending');
+    $ev = array_values(array_filter($o['events'], fn($e) => $e['kind'] === 'status' && $e['to_value'] === 'accepted'));
+    eq(count($ev), 1); ok(str_contains((string)$ev[0]['note'], 'automaticamente')); ok($ev[0]['user_id'] === null);
+    ok((int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ?', [$r['id']]) > 0, 'sem trabalhos de impressão');
+});
+t('auto: reenvio com a mesma chave não duplica pedido, aceitação nem trabalhos', function () use ($order, $key, $pid) {
+    Settings::set('auto_accept', '1'); $k = $key(); $it = [['product_id' => $pid('Batata Frita'), 'qty' => 1]];
+    $a = Orders::create($order($it), $k); $jobs = (int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ?', [$a['id']]);
+    $b = Orders::create($order($it), $k);
+    eq($b['duplicate'], true); eq($b['id'], $a['id']);
+    eq((int)Db::val("SELECT COUNT(*) FROM order_events WHERE order_id = ? AND to_value = 'accepted'", [$a['id']]), 1);
+    eq((int)Db::val('SELECT COUNT(*) FROM print_jobs WHERE order_id = ?', [$a['id']]), $jobs);
+});
+t('auto: desligada, o pedido fica Recebido; loja fechada continua recusando; pedido manual não é auto-aceito', function () use ($order, $key, $pid) {
+    $it = [['product_id' => $pid('Batata Frita'), 'qty' => 1]];
+    Settings::set('auto_accept', '0'); eq(Orders::get(Orders::create($order($it), $key())['id'])['status'], 'received');
+    Settings::set('auto_accept', '1');
+    $m = Orders::create($order($it, ['name' => 'Balcão', 'phone' => '']), $key(), ['id' => 1, 'name' => 'Operador']);
+    eq(Orders::get($m['id'])['status'], 'received');
+    Settings::set('orders_open', '0'); throws(fn() => Orders::create($order($it), $key()), 409); Settings::set('orders_open', '1');
+    Settings::set('auto_accept', '0'); // os testes seguintes partem de "Recebido"
+});
+t('quadro: hidratação em lote devolve os mesmos itens/opções/eventos que a individual', function () use ($order, $key, $pid) {
+    $a = Orders::board(150); ok(count($a) > 0);
+    foreach (array_slice($a, 0, 5) as $o) { $g = Orders::get((int)$o['id']); eq(count($o['items']), count($g['items'])); eq(count($o['events']), count($g['events'])); foreach ($o['items'] as $i => $it) eq(count($it['options']), count($g['items'][$i]['options'])); }
 });
 
 echo "Pedido\n";

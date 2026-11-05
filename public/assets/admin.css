@@ -151,3 +151,4 @@ dialog[open]{animation:adm-dlg 200ms cubic-bezier(.22,.61,.36,1) both}dialog[ope
 @media(max-width:800px),(pointer:coarse){.content a[href^="/admin/comanda/"]{display:inline-flex;align-items:center;min-height:44px;padding:0 8px}}
 @media(pointer:coarse){.icon-btn.sm{width:44px;height:44px}}
 @media(max-width:800px),(pointer:coarse){label.ck{display:flex;align-items:center;gap:10px;min-height:44px}}
+.soundbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 14px;border-bottom:1px solid var(--line,#eee);font-size:.85rem}.soundbar .sb-vol{display:flex;align-items:center;gap:6px}.soundbar input[type=range]{accent-color:var(--red,#c8102e);width:110px}.soundbar .sb-txt{color:var(--muted,#666)}

@@ -3,6 +3,7 @@
   <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
   <section class="panel"><h2>Funcionamento</h2>
     <label class="ck"><input type="checkbox" name="orders_open" value="1" <?= $s['orders_open'] === '1' ? 'checked' : '' ?>> <b>Receber pedidos</b> (desmarque para pausar tudo imediatamente)</label>
+    <label class="ck"><input type="checkbox" name="auto_accept" value="1" <?= $s['auto_accept'] === '1' ? 'checked' : '' ?>> <b>Aceitar pedidos automaticamente</b> (o servidor aceita o pedido válido do site assim que ele é gravado, mesmo com o painel fechado; pagamento continua pendente até a conferência)</label>
     <label class="ck"><input type="checkbox" name="delivery_enabled" value="1" <?= $s['delivery_enabled'] === '1' ? 'checked' : '' ?>> Entrega</label>
     <label class="ck"><input type="checkbox" name="pickup_enabled" value="1" <?= $s['pickup_enabled'] === '1' ? 'checked' : '' ?>> Retirada no balcão</label>
     <div class="inline"><label>Estimativa entrega (min)<input type="number" name="estimate_delivery_min" value="<?= e($s['estimate_delivery_min']) ?>" class="xs"></label><label>Estimativa retirada (min)<input type="number" name="estimate_pickup_min" value="<?= e($s['estimate_pickup_min']) ?>" class="xs"></label></div>
