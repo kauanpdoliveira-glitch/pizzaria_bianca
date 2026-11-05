@@ -30,24 +30,28 @@
   }
 
   // ---- segurança QZ: certificado público e assinatura validada no servidor ----
-  qz.security.setCertificatePromise(function (resolve) {
-    fetch('/admin/api/qz/certificate', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.text() : ''; }).then(resolve, function () { resolve(''); });
-  });
-  qz.security.setSignatureAlgorithm('SHA512');
-  // o qz-tray.js assina o SHA-256 do JSON; guardamos o JSON original para o servidor validar e calcular o mesmo hash
-  qz.api.setSha256Type(function (data) {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(data)).then(function (buf) {
-      var hex = Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
-      state.plain[hex] = data; return hex;
+  // Modo MANUAL (sem certificado/chave no servidor): NÃO registra certificado nem assinatura; o QZ Tray trata o site como não confiável e pede a confirmação do operador.
+  // Só com par válido configurado no servidor (data-signing=1) o navegador pede a assinatura ao servidor.
+  if (document.getElementById('qzst').dataset.signing === '1') {
+    qz.security.setCertificatePromise(function (resolve) {
+      fetch('/admin/api/qz/certificate', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.text() : ''; }).then(resolve, function () { resolve(''); });
     });
-  });
-  qz.security.setSignaturePromise(function (toSign) {
-    return function (resolve, reject) {
-      var message = state.plain[toSign]; delete state.plain[toSign];
-      if (!message) { reject(new Error('Conteúdo a assinar desconhecido.')); return; }
-      api('/sign', { message: message }).then(function (j) { resolve(j.signature); }, function (e) { log('Assinatura recusada: ' + e.message); reject(e); });
-    };
-  });
+    qz.security.setSignatureAlgorithm('SHA512');
+    // o qz-tray.js assina o SHA-256 do JSON; guardamos o JSON original para o servidor validar e calcular o mesmo hash
+    qz.api.setSha256Type(function (data) {
+      return crypto.subtle.digest('SHA-256', new TextEncoder().encode(data)).then(function (buf) {
+        var hex = Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+        state.plain[hex] = data; return hex;
+      });
+    });
+    qz.security.setSignaturePromise(function (toSign) {
+      return function (resolve, reject) {
+        var message = state.plain[toSign]; delete state.plain[toSign];
+        if (!message) { reject(new Error('Conteúdo a assinar desconhecido.')); return; }
+        api('/sign', { message: message }).then(function (j) { resolve(j.signature); }, function (e) { log('Assinatura recusada: ' + e.message); reject(e); });
+      };
+    });
+  }
 
   function setQz(ok, extra) { $('st-qz').textContent = ok ? 'conectado' : 'desconectado'; $('st-qzver').textContent = extra || ''; }
 

@@ -1,5 +1,5 @@
 <h1>Estação: <?= e($station['name']) ?></h1>
-<section class="panel" id="qzst" data-station="<?= (int)$station['id'] ?>" data-csrf="<?= e($csrf) ?>" data-active="<?= (int)$station['active'] ?>" data-paused="<?= (int)$station['paused'] ?>">
+<section class="panel" id="qzst" data-signing="<?= $signer['configured'] ? '1' : '0' ?>" data-station="<?= (int)$station['id'] ?>" data-csrf="<?= e($csrf) ?>" data-active="<?= (int)$station['active'] ?>" data-paused="<?= (int)$station['paused'] ?>">
 <p>Mantenha esta página <b>aberta</b> neste computador, com o QZ Tray rodando. Ao <b>Iniciar processamento</b> (você confirma que computador e impressoras estão prontos), ela busca pedidos do servidor e envia à impressora configurada. Com a aba fechada nada imprime. <a href="/admin/config/impressao">Configurações → Impressão</a></p>
 <ul class="kv">
 <li>Servidor: <b id="st-srv">aguardando…</b> · Abas: <span id="st-tabs">—</span></li>
