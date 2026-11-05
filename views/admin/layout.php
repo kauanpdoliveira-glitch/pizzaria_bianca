@@ -1,21 +1,21 @@
 <?php
-// Somente mÃ³dulos que existem; cada um aparece sÃ³ para quem tem a permissÃ£o (o servidor tambÃ©m valida).
-$nav = ['board' => ['/admin', 'GestÃ£o de pedidos', 'orders', 'orders'], 'floor' => ['/admin/salao', 'Mesas e comandas', 'floor', 'store'], 'cash' => ['/admin/caixa', 'Caixa', 'cashier', 'card'], 'executive' => ['/admin/executivo', 'VisÃ£o executiva', 'executive', 'reports'], 'reports' => ['/admin/relatorios', 'Vendas', 'reports', 'reports'], 'history' => ['/admin/pedidos', 'HistÃ³rico', 'orders', 'history'],
-        'customers' => ['/admin/clientes', 'Clientes', 'customers', 'customers'], 'menu' => ['/admin/cardapio', 'CardÃ¡pio', 'menu', 'menu'], 'print' => ['/admin/impressao', 'ImpressÃ£o', 'print', 'print'],
-        'config' => ['/admin/config', 'ConfiguraÃ§Ãµes', 'settings', 'config'], 'users' => ['/admin/usuarios', 'UsuÃ¡rios e permissÃµes', 'users', 'users'], 'access' => ['/admin/acessos', 'Auditoria de acessos', 'audit', 'history']];
+// Somente módulos que existem; cada um aparece só para quem tem a permissão (o servidor também valida).
+$nav = ['board' => ['/admin', 'Gestão de pedidos', 'orders', 'orders'], 'floor' => ['/admin/salao', 'Mesas e comandas', 'floor', 'store'], 'cash' => ['/admin/caixa', 'Caixa', 'cashier', 'card'], 'executive' => ['/admin/executivo', 'Visão executiva', 'executive', 'reports'], 'reports' => ['/admin/relatorios', 'Vendas', 'reports', 'reports'], 'history' => ['/admin/pedidos', 'Histórico', 'orders', 'history'],
+        'customers' => ['/admin/clientes', 'Clientes', 'customers', 'customers'], 'menu' => ['/admin/cardapio', 'Cardápio', 'menu', 'menu'], 'print' => ['/admin/impressao', 'Impressão', 'print', 'print'],
+        'config' => ['/admin/config', 'Configurações', 'settings', 'config'], 'users' => ['/admin/usuarios', 'Usuários e permissões', 'users', 'users'], 'access' => ['/admin/acessos', 'Auditoria de acessos', 'audit', 'history']];
 Auth::start(); $flash = $_SESSION['flash'] ?? null; $flashErr = $_SESSION['flash_err'] ?? null; unset($_SESSION['flash'], $_SESSION['flash_err']);
 $isBoard = $page === 'admin/board';
 $agentCls = ['online' => 'ok', 'offline' => 'bad', 'never' => 'warn'][$agent['state']];
-$heading = $isBoard ? 'GestÃ£o de pedidos' : $title;
+$heading = $isBoard ? 'Gestão de pedidos' : $title;
 $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidden="true" focusable="false"><use href="#i-' . $n . '"/></svg>';
 ?><!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><?php require APP_ROOT . '/views/_icons_head.php'; ?>
-<title><?= e($title) ?> â€” Painel Bianca</title><link rel="stylesheet" href="<?= View::asset('assets/brand.css') ?>"><link rel="stylesheet" href="<?= View::asset('assets/admin.css') ?>"></head>
+<title><?= e($title) ?> — Painel Bianca</title><link rel="stylesheet" href="<?= View::asset('assets/brand.css') ?>"><link rel="stylesheet" href="<?= View::asset('assets/admin.css') ?>"></head>
 <body data-csrf="<?= e($csrf) ?>" data-page="<?= e($page) ?>" data-can-print="<?= Auth::can('print') ? '1' : '0' ?>" data-can-customers="<?= Auth::can('customers') ? '1' : '0' ?>">
 <?php require APP_ROOT . '/views/admin/icons.php'; ?>
 <div class="shell">
 <aside class="side" id="side" aria-label="Menu do painel">
-  <a class="side-brand brand-band" href="/admin" aria-label="Bianca Pizzaria â€” inÃ­cio do painel"><?= View::brand('side') ?></a>
+  <a class="side-brand brand-band" href="/admin" aria-label="Bianca Pizzaria — início do painel"><?= View::brand('side') ?></a>
   <div class="side-store"><?= $ic('store') ?><span>Bianca Pizzaria</span></div>
   <p class="store-pill <?= $storeNow['open'] ? 'ok' : 'bad' ?>" id="store-pill" role="status"><span class="dot"></span><span id="store-text"><?= $storeNow['open'] ? 'Loja aberta' : e($storeNow['reason'] ?: 'Loja fechada') ?></span></p>
   <nav class="side-nav"><?php foreach ($nav as $k => [$href, $label, $perm, $icon]) if (Auth::can($perm)): ?>
@@ -25,7 +25,7 @@ $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidde
 <div class="main">
   <header class="hdr">
     <button class="icon-btn only-narrow" id="side-toggle" type="button" aria-controls="side" aria-expanded="false" aria-label="Abrir menu"><?= $ic('burger') ?></button>
-    <?php $tag = str_contains((string)$content, '<h1') ? 'p' : 'h1'; /* uma sÃ³ h1 por tela: se a pÃ¡gina traz a sua, o tÃ­tulo do cabeÃ§alho vira parÃ¡grafo */ ?>
+    <?php $tag = str_contains((string)$content, '<h1') ? 'p' : 'h1'; /* uma só h1 por tela: se a página traz a sua, o título do cabeçalho vira parágrafo */ ?>
     <<?= $tag ?> class="ttl"><?= e($heading) ?></<?= $tag ?>>
     <div class="hdr-actions">
       <a class="icon-btn <?= $agentCls ?>" id="agent-ic" href="/admin/impressao" aria-label="<?= e($agent['label']) ?>" title="<?= e($agent['label']) ?>"><?= $ic('print') ?><span class="sr" id="agent-txt"><?= e($agent['label']) ?></span></a>
