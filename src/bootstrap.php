@@ -35,7 +35,7 @@ spl_autoload_register(function (string $c) {
 function e(?string $s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function money(int $cents): string { return 'R$ ' . number_format($cents / 100, 2, ',', '.'); }
 function now(): string { return date('Y-m-d H:i:s'); }
-function is_https(): bool { return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'; }
+function is_https(): bool { return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || str_starts_with((string)env('APP_URL', ''), 'https://'); }   // APP_URL https (configuração confiável) cobre túneis que não enviam X-Forwarded-Proto
 function base_url(): string { return rtrim(env('APP_URL', ''), '/'); }
 function url(string $p = ''): string { return base_url() . '/' . ltrim($p, '/'); }
 function json_out($data, int $code = 200): never
