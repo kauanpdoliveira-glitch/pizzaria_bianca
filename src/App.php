@@ -109,7 +109,8 @@ final class App
         header('Content-Type: application/xml; charset=utf-8');
         echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>' . e(url('/')) . '</loc></url><url><loc>' . e(url('/historia')) . '</loc></url><url><loc>' . e(url('/cardapio')) . '</loc></url></urlset>';
     }
-    private static function apiMenu(): void { json_out(Pricing::menu() + ['status' => Settings::storeStatus()]); }
+    // Cardápio público: cache curto de borda (15 s) — alterações no catálogo aparecem em até 15 s; preço, disponibilidade e loja aberta são sempre revalidados no servidor ao fechar o pedido.
+    private static function apiMenu(): void { json_out(Pricing::menu() + ['status' => Settings::storeStatus()], 200, 'public, max-age=0, s-maxage=15, stale-while-revalidate=30'); }
     private static function apiQuote(): void
     {
         $b = self::body();
@@ -136,7 +137,8 @@ final class App
         // repetições da mesma chave são devolvidas sem consumir limite
         if (!Db::val('SELECT 1 FROM orders WHERE idempotency_key = ?', [$key])) self::rate('order', 10, 600);
         $r = Orders::create($b, $key);
-        json_out(['token' => $r['token'], 'id' => $r['id'], 'duplicate' => $r['duplicate'], 'status' => 'received', 'message' => 'Pedido recebido! Aguarde a confirmação da loja.'], $r['duplicate'] ? 200 : 201);
+        $st = (string)Db::val('SELECT status FROM orders WHERE id = ?', [$r['id']]);
+        json_out(['token' => $r['token'], 'id' => $r['id'], 'duplicate' => $r['duplicate'], 'status' => $st, 'message' => $st === 'received' ? 'Pedido recebido! Aguarde a confirmação da loja.' : 'Pedido recebido e aceito pela loja! Acompanhe o andamento.'], $r['duplicate'] ? 200 : 201);
     }
     private static function apiTrack(string $token): void
     {

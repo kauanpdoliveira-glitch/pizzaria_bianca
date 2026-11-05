@@ -38,11 +38,11 @@ function now(): string { return date('Y-m-d H:i:s'); }
 function is_https(): bool { return (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https' || str_starts_with((string)env('APP_URL', ''), 'https://'); }   // APP_URL https (configuração confiável) cobre túneis que não enviam X-Forwarded-Proto
 function base_url(): string { return rtrim(env('APP_URL', ''), '/'); }
 function url(string $p = ''): string { return base_url() . '/' . ltrim($p, '/'); }
-function json_out($data, int $code = 200): never
+function json_out($data, int $code = 200, string $cache = 'no-store'): never
 {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
+    header('Cache-Control: ' . $cache);
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
