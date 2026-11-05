@@ -365,7 +365,10 @@ final class App
     private static function admApiOrders(): void
     {
         Auth::require('orders', true);
-        json_out(['now' => now(), 'orders' => self::withJobs(Orders::board(150)), 'store' => Settings::storeStatus(), 'agent' => Printing::agentState()]);
+        $rev = Orders::boardRev();
+        // polling incremental: se nada mudou desde a revisão que o painel já tem, devolve só relógio/loja/agente
+        if (($_GET['rev'] ?? '') === $rev) json_out(['now' => now(), 'unchanged' => true, 'rev' => $rev, 'store' => Settings::storeStatus(), 'agent' => Printing::agentState()]);
+        json_out(['rev' => $rev, 'now' => now(), 'orders' => self::withJobs(Orders::board(150)), 'store' => Settings::storeStatus(), 'agent' => Printing::agentState()]);
     }
     /** Pedido de balcão/telefone cadastrado pelo operador. Mesmas regras de preço do pedido público; ignora horário/pausa da loja. */
     private static function admApiCreateOrder(): void

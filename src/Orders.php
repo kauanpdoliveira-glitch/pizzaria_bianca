@@ -214,6 +214,14 @@ final class Orders
         return $orders;
     }
 
+    /** Revisão barata (2 consultas) do que o quadro mostra: pedidos (última alteração/quantidade) e fila de impressão (estado/tentativas). Igual = nada a baixar. */
+    public static function boardRev(): string
+    {
+        $o = Db::one('SELECT MAX(updated_at) AS mu, COUNT(*) AS n, MAX(id) AS mx FROM orders');
+        $j = Db::all('SELECT status, COUNT(*) AS n, COALESCE(SUM(attempts),0) AS a, COALESCE(SUM(version),0) AS v, MAX(id) AS mx FROM print_jobs GROUP BY status ORDER BY status');
+        return substr(hash('sha256', json_encode([$o, $j])), 0, 20);
+    }
+
     /** Pedidos do quadro da gestão: ativos + concluídos/cancelados de hoje, em uma única consulta. */
     public static function board(int $activeLimit = 150): array
     {

@@ -443,13 +443,15 @@
   async function poll() {
     const my = ++S.pollSeq;
     try {
-      const d = await call('/admin/api/orders');
+      const d = await call('/admin/api/orders' + (S.rev ? '?rev=' + encodeURIComponent(S.rev) : ''));
       if (my !== S.pollSeq) return; // chegou uma resposta mais nova: descarta esta
       S.fails = 0; S.lastOk = Date.now(); S.serverNow = parse(d.now); S.polledAt = Date.now(); S.store = d.store; S.agent = d.agent;
-      const ids = new Set(d.orders.map(o => o.id));
-      notifyNew(d.orders, !S.known);
-      S.known = ids; S.orders = d.orders; S.map = new Map(d.orders.map(o => [o.id, o]));
-      if (S.fetched && S.map.has(S.fetched.id)) S.fetched = null;
+      if (!d.unchanged) { // nada mudou: só relógio/loja/agente; senão baixa o quadro completo
+        const ids = new Set(d.orders.map(o => o.id));
+        notifyNew(d.orders, !S.known);
+        S.known = ids; S.orders = d.orders; S.map = new Map(d.orders.map(o => [o.id, o])); S.rev = d.rev;
+        if (S.fetched && S.map.has(S.fetched.id)) S.fetched = null;
+      }
       const c = $('#conn'); c.textContent = 'Atualizado às ' + d.now.slice(11, 16); c.className = 'conn on'; $('#stale').hidden = true;
       const sp = $('#store-pill'); sp.className = 'store-pill ' + (d.store.open ? 'ok' : 'bad'); $('#store-text').textContent = d.store.open ? 'Loja aberta' : (d.store.reason || 'Loja fechada');
       const ai = $('#agent-ic'); ai.className = 'icon-btn ' + ({ online: 'ok', offline: 'bad', never: 'warn' }[d.agent.state]);
