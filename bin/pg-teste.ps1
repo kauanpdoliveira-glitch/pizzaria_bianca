@@ -7,7 +7,7 @@ $pf = Join-Path $root 'storage\homologacao\supabase-pass.dpapi'
 if (-not (Test-Path $pf)) { Write-Host 'Senha ainda nao guardada. Rode: powershell -ExecutionPolicy Bypass -File bin\supabase-credenciais.ps1'; exit 2 }
 $sec = ConvertTo-SecureString (Get-Content $pf)
 $env:DB_PASS = [Net.NetworkCredential]::new('', $sec).Password
-$env:DB_DRIVER = 'pgsql'; $env:DB_HOST = $HostName; $env:DB_PORT = '5432'; $env:DB_USER = $User; $env:DB_NAME = $Db
+$env:DB_STATEMENT_TIMEOUT_MS = '30000'; $env:DB_LOCK_TIMEOUT_MS = '15000'; $env:DB_DRIVER = 'pgsql'; $env:DB_HOST = $HostName; $env:DB_PORT = '5432'; $env:DB_USER = $User; $env:DB_NAME = $Db
 $schema = 'bianca_test_' + (-join ((97..122) | Get-Random -Count 8 | ForEach-Object { [char]$_ }))
 $php = @('-d', 'extension=pdo_pgsql', '-d', 'extension=pgsql')
 try {

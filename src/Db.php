@@ -24,6 +24,9 @@ final class Db
                 if (!preg_match('/^[a-z][a-z0-9_]{0,62}$/', $schema)) throw new RuntimeException('DB_SCHEMA inválido.');
                 $pdo->exec('SET search_path TO "' . $schema . '"');
             }
+            // sessão direta/session pooler (ex.: testes): timeouts na própria sessão, para uma espera por trava virar erro e não travar para sempre
+            if ((int)env('DB_STATEMENT_TIMEOUT_MS', '0') > 0) $pdo->exec('SET statement_timeout = ' . (int)env('DB_STATEMENT_TIMEOUT_MS'));
+            if ((int)env('DB_LOCK_TIMEOUT_MS', '0') > 0) $pdo->exec('SET lock_timeout = ' . (int)env('DB_LOCK_TIMEOUT_MS'));
         } else {
             $path = env('DB_SQLITE_PATH', APP_ROOT . '/storage/bianca.sqlite');
             if ($path !== ':memory:' && !is_dir(dirname($path))) @mkdir(dirname($path), 0775, true);
@@ -84,6 +87,7 @@ final class Db
     {
         $pdo = self::pdo();
         $pdo->beginTransaction();
+        if (self::$driver === 'pgsql') $pdo->exec("SET LOCAL lock_timeout = '8s'; SET LOCAL statement_timeout = '25s'");   // vale só nesta transação (seguro atrás do pooler em modo transaction)
         try { $r = $fn(); $pdo->commit(); return $r; }
         catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); throw $e; }
     }
