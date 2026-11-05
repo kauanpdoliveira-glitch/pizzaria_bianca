@@ -122,6 +122,9 @@
     if (!list.length) {
       const msg = S.q ? 'Nenhum pedido encontrado para essa busca neste filtro.' : S.filter === 'done' ? 'Nenhum pedido concluído ou cancelado hoje.' : 'Nenhum pedido neste filtro.';
       listEl.replaceChildren(h('div', { class: 'empty' }, icon('orders', 'ic big'), h('p', {}, msg), S.q ? h('a', { class: 'b ghost sm', href: '/admin/pedidos?q=' + encodeURIComponent(S.q) }, 'Buscar em todo o histórico') : null));
+    } else if (S.filter === 'all') {
+      const col = (t, ic, fn) => { const items = list.filter(fn); return h('section', { class: 'ocol', 'aria-label': t }, h('h3', { class: 'ochead' }, icon(ic), `${t} (${items.length})`), items.length ? h('div', { class: 'ocl' }, items.map(row)) : h('p', { class: 'muted small pad' }, 'Nenhum pedido nesta etapa.')); };
+      listEl.replaceChildren(col('Novos pedidos', 'bell', o => o.status === 'received' || o.status === 'accepted'), col('Em preparo e entrega', 'clock', o => o.status === 'preparing' || o.status === 'ready'));
     } else listEl.replaceChildren(...list.map(row));
     listEl.parentElement.scrollTop = top;
     if (fid) { const b = listEl.querySelector(`[data-id="${fid}"]`); if (b) b.focus({ preventScroll: true }); }

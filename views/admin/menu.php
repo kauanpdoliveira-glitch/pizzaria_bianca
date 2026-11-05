@@ -7,7 +7,7 @@ $move = function (string $kind, int $id, string $dir, string $label) use ($csrf)
 <?php };
 $reorder = !empty($_GET['ordenar']);
 ?>
-<nav class="tabs-a" aria-label="Seções do catálogo">
+<nav class="tabs" aria-label="Seções do catálogo">
   <?php foreach (['produtos' => 'Produtos', 'complementos' => 'Complementos', 'opcoes' => 'Opções'] as $k => $lbl): ?><a href="/admin/cardapio?aba=<?= $k ?><?= $sel ? '&cat=' . (int)$sel['id'] : '' ?>" <?= $aba === $k ? 'aria-current="page"' : '' ?>><?= $lbl ?></a><?php endforeach; ?>
 </nav>
 <div class="catalog">
@@ -56,7 +56,7 @@ $reorder = !empty($_GET['ordenar']);
     <?php foreach ($prods as $p): $st = $statusOf($p); ?>
       <li class="prow" data-name="<?= e(mb_strtolower($p['name'])) ?>">
         <span class="pthumb"><?php if ($p['image']): ?><img src="<?= e($p['image']) ?>" alt="" width="64" height="48" loading="lazy"><?php else: ?><span class="nophoto" title="Sem foto cadastrada">sem foto</span><?php endif; ?></span>
-        <span class="pinfo"><a href="/admin/cardapio/produto/<?= (int)$p['id'] ?>"><b><?= e($p['name']) ?></b></a><small><?= $p['n_sizes'] ? 'a partir de ' . e(money((int)$p['min_size'])) . ' · ' . (int)$p['n_sizes'] . ' tamanhos' : e(money((int)$p['base_price_cents'])) ?></small></span>
+        <span class="pinfo"><a href="/admin/cardapio/produto/<?= (int)$p['id'] ?>"><b><?= e($p['name']) ?></b></a><?php if (!empty($p['description'])): ?><small class="pdesc"><?= e($p['description']) ?></small><?php endif; ?><small><?= $p['n_sizes'] ? 'a partir de ' . e(money((int)$p['min_size'])) . ' · ' . (int)$p['n_sizes'] . ' tamanhos' : e(money((int)$p['base_price_cents'])) ?></small></span>
         <?php if ($reorder): ?><span class="mvs"><?php $move('product', (int)$p['id'], 'up', 'Subir ' . $p['name']); $move('product', (int)$p['id'], 'down', 'Descer ' . $p['name']); ?></span><?php endif; ?>
         <form method="post" action="/admin/cardapio/status" class="pst"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><input type="hidden" name="id" value="<?= (int)$p['id'] ?>">
           <label class="sr" for="st<?= (int)$p['id'] ?>">Status de <?= e($p['name']) ?></label>

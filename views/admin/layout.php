@@ -25,8 +25,13 @@ $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidde
 <div class="main">
   <header class="hdr">
     <button class="icon-btn only-narrow" id="side-toggle" type="button" aria-controls="side" aria-expanded="false" aria-label="Abrir menu"><?= $ic('burger') ?></button>
-    <?php $tag = str_contains((string)$content, '<h1') ? 'p' : 'h1'; /* uma só h1 por tela: se a página traz a sua, o título do cabeçalho vira parágrafo */ ?>
-    <<?= $tag ?> class="ttl"><?= e($heading) ?></<?= $tag ?>>
+<?php
+    // telas principais: o título vem do cabeçalho padronizado; a h1 própria da view (se houver) é removida para não duplicar
+    if (in_array($page, ['admin/salao', 'admin/caixa', 'admin/executivo', 'admin/reports', 'admin/history', 'admin/customers', 'admin/menu', 'admin/stations', 'admin/print', 'admin/config', 'admin/users', 'admin/access'], true)) $content = preg_replace('#<h1[^>]*>.*?</h1>#su', '', (string)$content, 1);
+    $tag = str_contains((string)$content, '<h1') ? 'p' : 'h1'; /* uma só h1 por tela */
+    $subs = ['board' => '', 'floor' => 'Acompanhe as mesas, os atendimentos e as comandas do salão.', 'cash' => 'Turno, recebimentos e conferência do caixa.', 'executive' => 'Panorama da operação da Bianca Pizzaria.', 'reports' => 'Vendas do período, por canal e forma de pagamento.', 'history' => 'Arquivo de pedidos da loja, com busca, filtros e detalhes.', 'customers' => 'Gerencie os clientes da sua pizzaria.', 'menu' => 'Cadastre e organize os produtos do cardápio, com categorias, complementos e opções.', 'print' => 'Configure impressoras, filas e layouts de impressão da sua pizzaria.', 'config' => 'Ajuste as informações e regras da sua loja.', 'users' => 'Gerencie a equipe, convide novos usuários e defina as permissões de acesso.', 'access' => 'Acompanhe os acessos ao sistema, as sessões e os eventos de segurança.'];
+    $navIcon = $nav[$activeNav][3] ?? 'store'; ?>
+    <div class="hdr-spacer"></div>
     <div class="hdr-actions">
       <a class="icon-btn <?= $agentCls ?>" id="agent-ic" href="/admin/impressao" aria-label="<?= e($agent['label']) ?>" title="<?= e($agent['label']) ?>"><?= $ic('print') ?><span class="sr" id="agent-txt"><?= e($agent['label']) ?></span></a>
       <?php if ($isBoard): ?>
@@ -34,14 +39,16 @@ $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidde
       <?php else: ?>
         <a class="icon-btn" href="/admin" aria-label="<?= $newCount ?> pedidos novos" title="Pedidos novos"><?= $ic('bell') ?><?php if ($newCount): ?><span class="badge"><?= $newCount ?></span><?php endif; ?></a>
       <?php endif; ?>
-      <details class="user"><summary class="icon-btn" aria-label="Conta: <?= e($user['name']) ?>"><?= $ic('user') ?></summary>
+      <details class="user"><summary class="user-chip" aria-label="Conta: <?= e($user['name']) ?>"><span class="avatar-sm"><?= $ic('user') ?></span><span class="uc-name"><?= e(Auth::ROLES[$user['role']] ?? $user['name']) ?></span><?= $ic('back', 'ic chev') ?></summary>
         <div class="user-pop"><p><b><?= e($user['name']) ?></b><br><span class="muted"><?= e(Auth::ROLES[$user['role']] ?? '') ?></span></p>
           <form method="post" action="/admin/logout"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><button class="b ghost sm block">Sair</button></form></div></details>
     </div>
   </header>
+  <div class="pg-head"><<?= $tag ?> class="pg-ttl"><?= $ic($navIcon, 'ic pg-ic') ?><?= e($heading) ?></<?= $tag ?>><?php if (($subs[$activeNav] ?? '') !== ''): ?><p class="pg-sub"><?= e($subs[$activeNav]) ?></p><?php endif; ?></div>
   <main class="content <?= $isBoard ? 'content-board' : '' ?>" id="content"><?php if ($flash): ?><p class="okmsg" role="status"><?= e($flash) ?></p><?php endif; ?><?php if ($flashErr): ?><p class="err" role="alert"><?= e($flashErr) ?></p><?php endif; ?><?= $content ?></main>
 </div></div>
 <script src="<?= View::asset('assets/picker.js') ?>" defer></script>
+<script src="<?= View::asset('assets/ui.js') ?>" defer></script>
 <script src="<?= View::asset('assets/neworder.js') ?>" defer></script>
 <script src="<?= View::asset('assets/admin.js') ?>" defer></script>
 </body></html>

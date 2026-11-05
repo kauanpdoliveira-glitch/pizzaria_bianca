@@ -1,6 +1,9 @@
 <h1>Configurações → Impressão</h1>
 <?php if ($canConfig): ?><p><a class="b" href="/admin/config/impressao/layouts">Layouts de comandas (editor) →</a></p><?php endif; ?>
-<section class="panel"><h2>Conectar uma nova impressora (passo a passo)</h2>
+<?php $ic = fn(string $n) => '<svg class="ic" aria-hidden="true" focusable="false"><use href="#i-' . $n . '"/></svg>'; $nSt = count($ov['stations']); $nOn = count(array_filter($ov['stations'], fn($x) => !empty($x['online']))); ?>
+<nav class="tabs" aria-label="Seções de impressão"><a href="#destinos" aria-current="true"><?= $ic('print') ?>Impressoras</a><a href="#estacoes"><?= $ic('store') ?>Estações</a><a href="#fila"><?= $ic('menu') ?>Fila</a><?php if ($canConfig): ?><a href="/admin/config/impressao/layouts"><?= $ic('note') ?>Layouts</a><?php endif; ?></nav>
+<div class="kpi-row"><div class="kpi"><span class="kic"><?= $ic('store') ?></span><div><span>Estações cadastradas</span><b><?= $nSt ?></b></div></div><div class="kpi"><span class="kic"><?= $ic('check') ?></span><div><span>Online agora</span><b><?= $nOn ?></b><small>depende da página da estação aberta e iniciada</small></div></div><div class="kpi"><span class="kic"><?= $ic('print') ?></span><div><span>Assinatura do QZ</span><b><?= $ov['qz']['configured'] ? 'Ativa' : 'Modo manual' ?></b><small><?= $ov['qz']['configured'] ? 'par de chaves válido' : 'o QZ pedirá sua confirmação' ?></small></div></div></div>
+<section class="card" id="passo-a-passo"><h2>Conectar uma nova impressora (passo a passo)</h2>
 <ol>
 <li><b>QZ Tray:</b> instale e abra o QZ Tray no computador da loja (ícone na bandeja do Windows). Windows 10 e 11.</li>
 <li><b>Conectar a estação:</b> abra a estação (“Abrir como estação”) e clique em <b>Conectar ao QZ</b>. Se o QZ pedir permissão, confirme na janela dele — neste modo a confirmação é manual e <b>não é impressão silenciosa</b>.</li>
@@ -9,7 +12,7 @@
 <li><b>Salvar e testar:</b> use <b>Imprimir teste</b> do destino. Sai uma página marcada “TESTE — NÃO PRODUZIR”.</li>
 </ol>
 <p class="note"><span><b>Impressora de rede ou Wi-Fi:</b> estar na mesma rede <b>não garante</b> que ela apareça aqui. O QZ lista só o que o Windows já conhece. Se não aparecer: instale a impressora no Windows (Configurações → Impressoras e scanners → Adicionar, pelo nome ou pelo endereço IP), volte e clique em <b>Atualizar impressoras</b>. O sistema não varre a rede. Conexão direta por IP só é oferecida quando o modelo e o protocolo forem compatíveis. As filas variam entre computadores, por isso a configuração é <b>por estação</b>.</span></p></section>
-<section class="panel"><h2>Como o pedido chega à impressora</h2>
+<section class="card"><h2>Como o pedido chega à impressora</h2>
 <ol>
 <li>O cliente abre o site pelo telefone (qualquer rede) e faz o pedido.</li>
 <li>O servidor grava o pedido <b>e</b> os trabalhos de impressão (um por destino, sem comanda vazia).</li>
@@ -19,8 +22,8 @@
 <p class="note"><span>O telefone nunca fala com o QZ nem com a impressora, e o QZ nunca é exposto à internet. O computador precisa estar <b>ligado, com internet, com o QZ Tray aberto e com a página da estação aberta e iniciada</b>. Com a aba fechada <b>nada imprime</b> (os trabalhos ficam na fila). Se a impressão falhar, o pedido continua registrado.</span></p>
 <p>Assinatura/confiança do QZ: <b><?= $ov['qz']['configured'] ? 'chave e certificado configurados no servidor' : 'sem certificado próprio — modo de teste com confirmação manual no QZ (não é impressão silenciosa)' ?></b>. <?= e($ov['qz']['reason'] !== 'ok' ? $ov['qz']['reason'] : '') ?> Documentação oficial: <a href="https://qz.io/docs/signing" target="_blank" rel="noopener">qz.io/docs/signing</a>. Passo a passo: <code>docs/IMPRESSAO.md</code>.</p>
 <p class="note"><span>“Enviado ao subsistema de impressão” significa que o QZ aceitou o trabalho; não prova papel impresso. Resultado incerto nunca é reenviado sozinho. Falta de papel/tampa aberta só seria informada se o equipamento fornecesse esse estado (não implementado).</span></p></section>
-<?php if ($ov['pendencias']): ?><section class="panel"><h2>Pendências</h2><ul><?php foreach ($ov['pendencias'] as $p): ?><li class="errmsg"><?= e($p['msg']) ?></li><?php endforeach; ?></ul></section><?php endif; ?>
-<section class="panel"><h2>Destinos e vias</h2>
+<?php if ($ov['pendencias']): ?><section class="card"><h2>Pendências</h2><ul><?php foreach ($ov['pendencias'] as $p): ?><li class="errmsg"><?= e($p['msg']) ?></li><?php endforeach; ?></ul></section><?php endif; ?>
+<section class="card" id="destinos"><h2>Impressoras por destino: vias, papel e impressão automática</h2>
 <p class="muted small">Cada pedido gera a <b>comanda completa do balcão</b> (todos os itens, valores e pagamento) e comandas de produção só com os itens de cada destino. <b>Vias</b> = quantas cópias de cada comanda (número inteiro ≥ 1); uma comanda extensa pode ocupar mais de uma página. Para suspender um destino use <b>Ligado</b>. Com <b>Impressão automática</b> desligada, os trabalhos ficam <b>retidos</b> até você liberar. Trabalhos já criados mantêm a configuração de quando nasceram.</p>
 <?php if ($canConfig): ?><form method="post" action="/admin/impressao/destinos"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><div class="tw"><table><thead><tr><th>Destino</th><th>Ligado</th><th>Impressão automática</th><th>Vias</th><th>Papel</th><th>Impressora(s) mapeada(s)</th></tr></thead><tbody>
 <?php foreach (Printing::SECTORS as $k => $label): $d = $dests[$k]; $maps = []; foreach ($ov['stations'] as $st) if (!empty($st['map'][$k]) && (int)$st['map'][$k]['active'] === 1) $maps[] = $st['name'] . ' → ' . $st['map'][$k]['printer_name']; ?>
@@ -32,7 +35,7 @@
 <td><?= $maps ? e(implode('; ', $maps)) : '<span class="errmsg">nenhuma</span>' ?></td></tr>
 <?php endforeach; ?></tbody></table></div><button class="b">Salvar destinos</button></form>
 <?php else: ?><ul><?php foreach (Printing::SECTORS as $k => $label): $d = $dests[$k]; ?><li><?= e($label) ?>: <?= $d['on'] ? 'ligado' : 'desligado' ?>, automática <?= $d['auto'] ? 'sim' : 'não' ?>, <?= (int)$d['copies'] ?> via(s)</li><?php endforeach; ?></ul><?php endif; ?></section>
-<section class="panel"><h2>Setor de produção por categoria</h2>
+<section class="card" id="setores"><h2>Setor de produção por categoria</h2>
 <p class="muted small">Doces, sobremesas e demais categorias <b>não têm destino presumido</b>: escolha Cozinha ou Copa/Bar. Enquanto estiver “não definido”, o item sai só na comanda do balcão e aparece como pendência. Exceção por produto: no cadastro do produto (a regra do produto vence a da categoria).</p>
 <?php if ($canConfig): ?><form method="post" action="/admin/impressao/setores"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><div class="tw"><table><thead><tr><th>Categoria</th><th>Produtos</th><th>Setor</th><th>Exceções</th></tr></thead><tbody>
 <?php foreach ($cats as $c): $sv = in_array($c['sector'], ['cozinha', 'copa'], true) ? $c['sector'] : ''; ?>
@@ -40,7 +43,7 @@
 <?php endforeach; ?></tbody></table></div><button class="b">Salvar setores</button></form><?php endif; ?></section>
 <datalist id="epson-models"><option value="TM-T20"><option value="TM-T20II"><option value="TM-T20III"><option value="TM-T88V"><option value="TM-T88VI"><option value="TM-T88VII"><option value="TM-m30"><option value="TM-m30II"><option value="TM-U220"><option value="L3150 (doméstica)"><option value="L3250 (doméstica)"></datalist>
 <?php foreach ($ov['stations'] as $s): ?>
-<section class="panel"><h2><?= e($s['name']) ?> <small class="muted">#<?= (int)$s['id'] ?> · <code><?= e((string)$s['code']) ?></code></small></h2>
+<section class="card" id="estacoes"><h2><?= e($s['name']) ?> <small class="muted">#<?= (int)$s['id'] ?> · <code><?= e((string)$s['code']) ?></code></small></h2>
 <ul class="kv">
 <li>Backend: <b><?= $s['online'] ? 'comunicando' : 'sem contato recente' ?></b> · QZ: <b><?= $s['qz_online'] ? 'conectado' . ($s['qz_version'] ? ' (' . e($s['qz_version']) . ')' : '') : 'desconectado' ?></b> · Última comunicação: <b><?= $s['last_seen'] ? e(date('d/m/Y H:i:s', strtotime($s['last_seen']))) : 'nunca' ?></b><?= $s['last_user'] ? ' por ' . e($s['last_user']) : '' ?></li>
 <li>Estado: <b><?= !$s['active'] ? 'desativada' : ($s['paused'] ? 'PAUSADA' : ($s['armed'] ? 'processando pedidos (iniciado por ' . e((string)$s['armed_by']) . ')' : 'parada — aguardando “Iniciar processamento”')) ?></b><?= $s['tabs'] > 1 ? ' · <span class="errmsg">' . (int)$s['tabs'] . ' abas abertas</span>' : '' ?> · Em andamento: <?= (int)$s['queue'] ?></li>
@@ -73,9 +76,9 @@
 <form method="post" action="/admin/estacoes/<?= (int)$s['id'] ?>/ativa" style="display:inline"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><input type="hidden" name="on" value="<?= $s['active'] ? 0 : 1 ?>"><button class="b ghost"><?= $s['active'] ? 'Desativar estação' : 'Reativar estação' ?></button></form>
 <?php else: ?><p class="note"><span>Você pode ver o estado, mas só o proprietário (ou quem ele autorizar) altera as impressoras.</span></p><?php endif; ?></section>
 <?php endforeach; ?>
-<?php if (!$ov['stations']): ?><section class="panel"><p class="muted">Nenhuma estação cadastrada.</p></section><?php endif; ?>
-<?php if ($canConfig): ?><section class="panel"><h2>Nova estação</h2><form method="post" action="/admin/config/impressao"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><label>Nome (ex.: Computador de casa — teste)<input name="name" maxlength="80" required></label> <label>Identificador (opcional)<input name="code" maxlength="40" placeholder="gerado do nome"></label> <button class="b">Criar estação</button></form></section><?php endif; ?>
-<section class="panel"><h2>Fila e erros</h2>
+<?php if (!$ov['stations']): ?><section class="card"><p class="muted">Nenhuma estação cadastrada.</p></section><?php endif; ?>
+<?php if ($canConfig): ?><section class="card" id="nova-estacao"><h2>Nova estação</h2><form method="post" action="/admin/config/impressao"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><label>Nome (ex.: Computador de casa — teste)<input name="name" maxlength="80" required></label> <label>Identificador (opcional)<input name="code" maxlength="40" placeholder="gerado do nome"></label> <button class="b">Criar estação</button></form></section><?php endif; ?>
+<section class="card" id="fila"><h2>Fila de impressão e erros</h2>
 <?php if ($canConfig): ?><form method="post" action="/admin/impressao/reter" data-confirm="Reter TODOS os trabalhos pendentes? Nada é apagado nem impresso; cada um só volta à fila quando você liberar." style="margin-bottom:.6rem"><input type="hidden" name="_csrf" value="<?= e($csrf) ?>"><button class="b ghost">Reter pendentes (pausar sem apagar)</button></form><?php endif; ?><div class="tw"><table><thead><tr><th>#</th><th>Pedido</th><th>Destino</th><th>Tipo</th><th>Estado</th><th>Estação</th><th>Tent.</th><th>Criado</th><th></th></tr></thead><tbody>
 <?php foreach ($ov['jobs'] as $j): ?><tr><td><?= (int)$j['id'] ?></td><td><?= $j['order_id'] ? '<a href="/admin/pedido/' . (int)$j['order_id'] . '">#' . (int)$j['order_id'] . '</a>' : '—' ?></td><td><?= e(Printing::SECTORS[$j['sector']] ?? ($j['sector'] === 'sem_destino' ? 'SEM DESTINO' : $j['sector'])) ?></td><td><?= ['reprint' => 'reimpressão', 'test' => 'TESTE', 'update' => 'alteração', 'cancel' => 'cancelamento'][$j['kind']] ?? 'original' ?></td>
 <td class="st-<?= e($j['status']) ?>"><?= e(Printing::STATUS[$j['status']] ?? $j['status']) ?><?= $j['last_error'] ? '<br><small>' . e($j['last_error']) . '</small>' : '' ?></td><td><?= e((string)$j['station_name']) ?></td><td><?= (int)$j['attempts'] ?></td><td><?= e(date('d/m H:i', strtotime($j['created_at']))) ?></td>

@@ -37,10 +37,12 @@ final class QzSigner
     public static function status(): array
     {
         $c = self::certificate(); $k = self::privateKey();
-        if (!$c || !$k) return ['configured' => false, 'reason' => 'Certificado/chave do QZ não configurados: o QZ Tray pedirá confirmação manual a cada impressão (modo não silencioso).', 'subject' => null, 'expires' => null];
-        $x = @openssl_x509_parse($c); $pk = @openssl_pkey_get_private($k);
-        if (!$x || !$pk) return ['configured' => false, 'reason' => 'Certificado ou chave inválidos (' . (!$x ? 'certificado ilegível, ' . strlen($c) . ' caracteres' : 'chave privada ilegível, ' . strlen($k) . ' caracteres, ' . (str_contains($k, 'BEGIN') ? 'com cabeçalho PEM' : 'sem cabeçalho PEM')) . ').', 'subject' => null, 'expires' => null];
-        if (!@openssl_x509_check_private_key($c, $pk)) return ['configured' => false, 'reason' => 'A chave privada não corresponde ao certificado.', 'subject' => null, 'expires' => null];
+        // Modo manual (sem certificado confiável): nada é assinado e o QZ Tray pede a confirmação do operador. Valores inválidos são IGNORADOS (nunca usados).
+        $manual = 'modo manual: o QZ Tray pedirá a sua confirmação a cada impressão (não é impressão silenciosa)';
+        if (!$c && !$k) return ['configured' => false, 'reason' => 'Sem certificado/chave do QZ — ' . $manual . '.', 'subject' => null, 'expires' => null];
+        $x = $c ? @openssl_x509_parse($c) : false; $pk = $k ? @openssl_pkey_get_private($k) : false;
+        if (!$c || !$k || !$x || !$pk) return ['configured' => false, 'reason' => 'Configuração de assinatura incompleta ou inválida (' . (!$k ? 'falta a chave' : (!$pk ? 'QZ_PRIVATE_KEY inválida' : (!$c ? 'falta o certificado' : 'QZ_CERT inválido'))) . ') foi ignorada — ' . $manual . '. Remova as variáveis QZ_CERT/QZ_PRIVATE_KEY ou informe um par válido.', 'subject' => null, 'expires' => null];
+        if (!@openssl_x509_check_private_key($c, $pk)) return ['configured' => false, 'reason' => 'A chave privada não corresponde ao certificado: par ignorado — ' . $manual . '.', 'subject' => null, 'expires' => null];
         return ['configured' => true, 'reason' => 'ok', 'subject' => $x['name'] ?? null, 'expires' => date('d/m/Y', (int)$x['validTo_time_t'])];
     }
 
