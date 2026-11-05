@@ -1,5 +1,14 @@
 <h1>Configurações → Impressão</h1>
 <?php if ($canConfig): ?><p><a class="b" href="/admin/config/impressao/layouts">Layouts de comandas (editor) →</a></p><?php endif; ?>
+<section class="panel"><h2>Conectar uma nova impressora (passo a passo)</h2>
+<ol>
+<li><b>QZ Tray:</b> instale e abra o QZ Tray no computador da loja (ícone na bandeja do Windows). Windows 10 e 11.</li>
+<li><b>Conectar a estação:</b> abra a estação (“Abrir como estação”) e clique em <b>Conectar ao QZ</b>. Se o QZ pedir permissão, confirme na janela dele — neste modo a confirmação é manual e <b>não é impressão silenciosa</b>.</li>
+<li><b>Buscar/Atualizar impressoras:</b> clique no botão de mesmo nome. A lista mostra as <b>filas de impressão instaladas no Windows</b> deste computador.</li>
+<li><b>Escolher:</b> selecione a fila detectada para cada destino (balcão, cozinha, copa) e defina papel (58 mm, 80 mm ou A4), vias por destino e formato. A Epson L3210 é A4: use o formato compatível com ela (HTML), nunca ESC/POS.</li>
+<li><b>Salvar e testar:</b> use <b>Imprimir teste</b> do destino. Sai uma página marcada “TESTE — NÃO PRODUZIR”.</li>
+</ol>
+<p class="note"><span><b>Impressora de rede ou Wi-Fi:</b> estar na mesma rede <b>não garante</b> que ela apareça aqui. O QZ lista só o que o Windows já conhece. Se não aparecer: instale a impressora no Windows (Configurações → Impressoras e scanners → Adicionar, pelo nome ou pelo endereço IP), volte e clique em <b>Atualizar impressoras</b>. O sistema não varre a rede. Conexão direta por IP só é oferecida quando o modelo e o protocolo forem compatíveis. As filas variam entre computadores, por isso a configuração é <b>por estação</b>.</span></p></section>
 <section class="panel"><h2>Como o pedido chega à impressora</h2>
 <ol>
 <li>O cliente abre o site pelo telefone (qualquer rede) e faz o pedido.</li>
