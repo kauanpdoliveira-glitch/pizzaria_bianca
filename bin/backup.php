@@ -8,7 +8,8 @@ if (PHP_SAPI !== 'cli') exit('Somente via terminal.');
 require __DIR__ . '/../src/bootstrap.php';
 $dir = $argv[1] ?? APP_ROOT . '/storage/backups';
 if (!is_dir($dir)) mkdir($dir, 0700, true);
-$tables = Db::$driver === 'mysql' ? array_map('current', Db::all('SHOW TABLES')) : array_column(Db::all("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"), 'name');
+Db::pdo();
+$tables = Db::$driver === 'mysql' ? array_map('current', Db::all('SHOW TABLES')) : (Db::$driver === 'pgsql' ? array_column(Db::all("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'"), 'name') : array_column(Db::all("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"), 'name'));
 $tables = array_values(array_diff($tables, ['schema_migrations', 'login_attempts', 'rate_limits', 'password_resets', 'app_sessions'])); // efêmero ou sensível (tokens)
 $data = ['version' => 1, 'created_at' => now()];
 foreach ($tables as $t) {   // colunas binárias (imagens no banco) vão em base64 para o JSON não quebrar

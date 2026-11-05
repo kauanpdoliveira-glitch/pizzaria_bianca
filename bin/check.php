@@ -15,7 +15,7 @@ echo "PHP\n";
 $say(version_compare(PHP_VERSION, '8.2.0', '>='), 'PHP ' . PHP_VERSION . ' (precisa ≥ 8.2)');
 foreach (['pdo', 'mbstring', 'gd', 'fileinfo', 'openssl', 'json'] as $x) $say(extension_loaded($x), "extensão $x");
 $drv = env('DB_DRIVER', 'sqlite');
-$say(extension_loaded($drv === 'mysql' ? 'pdo_mysql' : 'pdo_sqlite'), 'driver PDO ' . $drv);
+$say(extension_loaded(['mysql' => 'pdo_mysql', 'pgsql' => 'pdo_pgsql'][$drv] ?? 'pdo_sqlite'), 'driver PDO ' . $drv);
 
 echo "Configuração\n";
 $say(is_file(APP_ROOT . '/.env'), '.env presente');
@@ -30,6 +30,7 @@ $say(is_file(APP_ROOT . '/public/favicon.ico'), 'favicon.ico presente', false);
 echo "Banco\n";
 try {
     $pdo = Db::pdo(); $say(true, 'conexão (' . Db::$driver . ')');
+    if (Db::$driver === 'pgsql') $say(true, 'servidor ' . Db::val('SHOW server_version') . ' (PostgreSQL, TLS ' . env('DB_SSLMODE', 'require') . ')');
     if (Db::$driver === 'mysql') {
         $say(true, 'servidor ' . Db::val('SELECT VERSION()'));
         $cs = Db::val('SELECT @@character_set_database'); $say(str_starts_with((string)$cs, 'utf8'), "charset do banco: $cs", false);
@@ -40,7 +41,7 @@ try {
     $say(!$missing, $missing ? 'migrações pendentes: ' . implode(', ', $missing) . ' (rode php bin/migrate.php)' : 'migrações aplicadas: ' . count($applied));
     $expected = ['users' => ['role', 'session_version', 'perms'], 'orders' => ['origin', 'tab_id', 'version'], 'tabs' => ['open_key', 'idempotency_key'], 'visits' => ['idempotency_key'], 'tab_payments' => ['status'], 'cash_shifts' => ['open_key'], 'categories' => ['sector'], 'print_jobs' => ['uuid'], 'dining_tables' => ['number']];
     foreach ($expected as $t => $cols) {
-        try { $row = Db::one("SELECT * FROM $t LIMIT 1"); $have = $row ? array_keys($row) : array_column(Db::all(Db::$driver === 'mysql' ? "SHOW COLUMNS FROM $t" : "PRAGMA table_info($t)"), Db::$driver === 'mysql' ? 'Field' : 'name'); }
+        try { $row = Db::one("SELECT * FROM $t LIMIT 1"); $have = $row ? array_keys($row) : (Db::$driver === 'pgsql' ? array_column(Db::all('SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?', [$t]), 'column_name') : array_column(Db::all(Db::$driver === 'mysql' ? "SHOW COLUMNS FROM $t" : "PRAGMA table_info($t)"), Db::$driver === 'mysql' ? 'Field' : 'name')); }
         catch (Throwable $e) { $say(false, "tabela $t ausente"); continue; }
         $say(!array_diff($cols, $have), "tabela $t" . (array_diff($cols, $have) ? ' sem colunas: ' . implode(',', array_diff($cols, $have)) : ''));
     }

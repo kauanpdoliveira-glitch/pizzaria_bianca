@@ -634,7 +634,7 @@ final class App
     private static function admCustomers(): void
     {
         $q = trim((string)($_GET['q'] ?? ''));
-        $w = $q !== '' ? 'WHERE c.name LIKE ? OR c.phone LIKE ?' : '';
+        $w = $q !== '' ? 'WHERE c.name ' . Db::like() . ' ? OR c.phone ' . Db::like() . ' ?' : '';
         $p = $q !== '' ? ['%' . $q . '%', '%' . normalize_phone($q) . '%'] : [];
         $rows = Db::all("SELECT c.*, COUNT(o.id) AS n, COALESCE(SUM(CASE WHEN o.status <> 'cancelled' THEN o.total_cents END),0) AS total
             FROM customers c LEFT JOIN orders o ON o.customer_id = c.id $w GROUP BY c.id ORDER BY c.last_order_at DESC LIMIT 200", $p);
@@ -890,7 +890,7 @@ final class App
     /** Verificação de saúde SIMPLES (sem dados): para o supervisor local e monitoramento. */
     private static function health(): void
     {
-        try { $n = (int)Db::val('SELECT COUNT(*) FROM schema_migrations'); json_out(['ok' => true, 'db' => true, 'migrations' => $n, 'env' => env('APP_ENV', 'production'), 'time' => now()]); }
+        try { $n = (int)Db::val('SELECT COUNT(*) FROM schema_migrations'); json_out(['ok' => true, 'db' => true, 'driver' => Db::$driver, 'migrations' => $n, 'env' => env('APP_ENV', 'production'), 'time' => now()]); }
         catch (Throwable $e) { json_out(['ok' => false, 'db' => false], 503); }
     }
     /** Convite: o convidado define a PRÓPRIA senha com o token do e-mail. */

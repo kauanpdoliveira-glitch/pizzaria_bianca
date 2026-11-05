@@ -168,7 +168,7 @@ final class Orders
         if (!empty($f['to'])) { $w[] = 'created_at <= ?'; $p[] = $f['to'] . ' 23:59:59'; }
         if (!empty($f['q'])) {
             $q = ltrim(trim($f['q']), '#');
-            $w[] = '(id = ? OR customer_name LIKE ? OR customer_phone LIKE ?)';
+            $w[] = '(id = ? OR customer_name ' . Db::like() . ' ? OR customer_phone ' . Db::like() . ' ?)';
             $p[] = ctype_digit($q) ? (int)$q : 0; $p[] = '%' . $f['q'] . '%'; $p[] = '%' . normalize_phone($f['q']) . '%';
         }
         $sql = 'SELECT * FROM orders' . ($w ? ' WHERE ' . implode(' AND ', $w) : '') . ' ORDER BY id DESC LIMIT ' . (int)$limit;

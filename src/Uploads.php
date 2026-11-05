@@ -11,7 +11,7 @@ final class Uploads
     {
         $name = bin2hex(random_bytes(8)) . '.jpg';
         if (self::driver() === 'db') {
-            Db::insert('uploaded_files', ['name' => $name, 'mime' => 'image/jpeg', 'data' => $jpeg, 'created_at' => now()]);
+            Db::pdo(); Db::insert('uploaded_files', ['name' => $name, 'mime' => 'image/jpeg', 'data' => Db::$driver === 'pgsql' ? base64_encode($jpeg) : $jpeg, 'created_at' => now()]);   // PostgreSQL: coluna TEXT com base64 (evita escape de bytea atrás do pooler)
             return "/uploads/$name";
         }
         $dir = APP_ROOT . '/public/uploads';
@@ -28,6 +28,6 @@ final class Uploads
         $r = Db::one('SELECT mime, data FROM uploaded_files WHERE name = ?', [$name]);
         if (!$r) return null;
         if (is_resource($r['data'])) $r['data'] = stream_get_contents($r['data']);
-        return ['mime' => $r['mime'], 'data' => (string)$r['data']];
+        return ['mime' => $r['mime'], 'data' => Db::$driver === 'pgsql' ? (string)base64_decode((string)$r['data'], true) : (string)$r['data']];
     }
 }

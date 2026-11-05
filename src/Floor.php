@@ -108,7 +108,7 @@ final class Floor
                 // reenvio/clique repetido: reconferir a chave DENTRO da transação (com o bloqueio já obtido). Sem isto, um 2º envio simultâneo
                 // via a mesa "já em atendimento" e recebia 409 em vez do resultado da 1ª tentativa.
                 if ($d = Db::one('SELECT id, visit_id FROM tabs WHERE idempotency_key = ?', [$key])) return ['tab_id' => (int)$d['id'], 'visit_id' => (int)$d['visit_id'], 'duplicate' => true];
-                $tb = Db::one('SELECT * FROM dining_tables WHERE id = ? AND active = 1' . (Db::$driver === 'mysql' ? ' FOR UPDATE' : ''), [(int)($in['table_id'] ?? 0)]);
+                $tb = Db::one('SELECT * FROM dining_tables WHERE id = ? AND active = 1' . (Db::$driver !== 'sqlite' ? ' FOR UPDATE' : ''), [(int)($in['table_id'] ?? 0)]);
                 if (!$tb) throw new HttpError(422, 'Mesa inválida.');
                 $active = Db::all("SELECT * FROM visits WHERE table_id = ? AND status = 'active' ORDER BY id", [$tb['id']]);
                 $pending = Db::all("SELECT id, name FROM visits WHERE table_id = ? AND status = 'awaiting_cashier' ORDER BY id", [$tb['id']]);

@@ -1,10 +1,11 @@
 <?php
 declare(strict_types=1);
 /** Execução: php tests/run.php   (usa SQLite em memória; não toca em dados reais) */
-putenv('DB_DRIVER=sqlite'); $_ENV['DB_DRIVER'] = 'sqlite'; $_ENV['DB_SQLITE_PATH'] = ':memory:';
+$PG = getenv('BIANCA_TEST_PG') === '1';   // execução opcional contra PostgreSQL, SOMENTE em esquema descartável bianca_test_* (ver bin/pg-teste.ps1)
+if (!$PG) { putenv('DB_DRIVER=sqlite'); $_ENV['DB_DRIVER'] = 'sqlite'; $_ENV['DB_SQLITE_PATH'] = ':memory:'; }
 require __DIR__ . '/../src/bootstrap.php';
 // proteção: a suíte grava dados; nunca pode rodar contra um banco de arquivo/MySQL (mesmo que o .env aponte para um)
-if (env('DB_DRIVER') !== 'sqlite' || env('DB_SQLITE_PATH') !== ':memory:') exit("Recusado: os testes só rodam em SQLite em memória (o .env não pode sobrescrever DB_SQLITE_PATH).\n");
+if ($PG ? (env('DB_DRIVER') !== 'pgsql' || !preg_match('/^bianca_test_[a-z0-9]+$/', (string)env('DB_SCHEMA'))) : (env('DB_DRIVER') !== 'sqlite' || env('DB_SQLITE_PATH') !== ':memory:')) exit("Recusado: os testes só rodam em SQLite em memória (o .env não pode sobrescrever DB_SQLITE_PATH).\n");
 
 $pass = 0; $fail = 0;
 function t(string $name, callable $fn): void
@@ -1049,6 +1050,15 @@ t('perfis: ESC/POS respeita alinhamento/tamanho suportado e ignora logo; HTML ac
     $r = Orders::create($order([['product_id' => $pid('Calabresa'), 'size_id' => $sizeOf('Calabresa'), 'qty' => 1]]), $key()); $j = Db::one("SELECT * FROM print_jobs WHERE order_id = ? AND sector = 'cozinha'", [$r['id']]);
     $b = Printing::build($j, ['cols' => 48, 'margin' => 0, 'mode' => 'escpos', 'charset' => 'ascii', 'cut' => false]); foreach ($b['lines'] as $l) if (empty($l['big']) && mb_strlen($l['t']) > 38) throw new Exception('largura útil 40−2 não respeitada');
     if (!str_contains($b['bytes'], "  ")) throw new Exception('margem do layout ausente'); Db::exec('DELETE FROM print_layouts');
+});
+t('PostgreSQL: migrations traduzidas sem tipos/tokens de MySQL ou SQLite (tradução textual; a execução real é conferida em bin/pg-teste.ps1)', function () {
+    foreach (glob(APP_ROOT . '/migrations/*.sql') as $f) {
+        $pg = Db::translate((string)file_get_contents($f), 'pgsql');
+        foreach (['{{', 'UNSIGNED', 'TINYINT', 'LONGBLOB', 'MEDIUMTEXT', 'AUTOINCREMENT', 'ENGINE=', 'AUTO_INCREMENT'] as $bad) if (str_contains($pg, $bad)) throw new Exception(basename($f) . ' ainda tem ' . $bad);
+    }
+    $s = Db::translate('CREATE TABLE t (id {{PK}}, a INT UNSIGNED, b TINYINT NOT NULL DEFAULT 0, c LONGBLOB){{ENGINE}};', 'pgsql');
+    eq($s, 'CREATE TABLE t (id SERIAL PRIMARY KEY, a INTEGER, b SMALLINT NOT NULL DEFAULT 0, c TEXT);');
+    if (!str_contains(Db::translate('{{PK}}', 'mysql'), 'AUTO_INCREMENT') || !str_contains(Db::translate('{{PK}}', 'sqlite'), 'AUTOINCREMENT')) throw new Exception('tradução de outros bancos mudou');
 });
 t('modelos iniciais são válidos para todos os destinos', function () {
     foreach (array_keys(Printing::SECTORS) as $s) foreach (PrintLayout::presets($s) as $k => [$name, $lay]) { PrintLayout::validate($s, $lay); if ($name === '') throw new Exception("modelo $k sem nome"); }
