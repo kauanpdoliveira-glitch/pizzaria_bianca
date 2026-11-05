@@ -162,7 +162,7 @@
       pz.replaceChildren(h('div', { class: 'pz-in' }, head, body, foot));
 
       function draw() {
-        fill(head, h('button', { class: 'x', type: 'button', 'aria-label': st.step > 1 ? 'Voltar uma etapa' : 'Fechar', onclick: () => { if (st.step > 1) { st.step--; st.msg = ''; draw(); } else pz.close(); } }, st.step > 1 ? '‹' : '×'),
+        fill(head, st.step > 1 ? h('button', { class: 'x', type: 'button', 'aria-label': 'Voltar uma etapa', onclick: () => { st.step--; st.msg = ''; draw(); } }, '‹') : h('span', { class: 'x', 'aria-hidden': 'true', style: 'visibility:hidden' }, '×'), // etapa 1: só o X da direita (sem botão duplicado)
           h('h2', { id: 'pz-title' }, title()), h('button', { class: 'x', type: 'button', 'aria-label': 'Fechar montagem', onclick: () => pz.close() }, '×'));
         pz.setAttribute('aria-labelledby', 'pz-title');
         if (st.step === 1) drawSize(); else if (st.step === 2) drawFlavors(); else drawCustom();

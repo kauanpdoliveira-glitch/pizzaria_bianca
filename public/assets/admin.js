@@ -427,7 +427,8 @@
   // Atualização: polling incremental (?rev=) com agenda ÚNICA (sem setInterval concorrente), mais lento em aba oculta,
   // recuo progressivo com jitter após falhas e retomada imediata ao voltar à aba/rede. Um só pedido em voo por vez.
   let pollTimer = null, inflight = false;
-  const nextDelay = () => { const base = document.hidden ? 20000 : (window.BiancaRealtime && BiancaRealtime.isUp() ? 30000 : 5000); // canal privado conectado: polling vira só rede de segurança return (S.fails ? Math.min(30000, base * 2 ** Math.min(S.fails, 3)) : base) + Math.random() * 600; };
+  // canal privado conectado: o polling vira só rede de segurança (30 s)
+  const nextDelay = () => { const base = document.hidden ? 20000 : (window.BiancaRealtime && BiancaRealtime.isUp() ? 30000 : 5000); return (S.fails ? Math.min(30000, base * 2 ** Math.min(S.fails, 3)) : base) + Math.random() * 600; };
   const schedule = () => { clearTimeout(pollTimer); pollTimer = setTimeout(tick, nextDelay()); };
   async function tick() { if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); }
   const pollNow = async () => { clearTimeout(pollTimer); if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); };

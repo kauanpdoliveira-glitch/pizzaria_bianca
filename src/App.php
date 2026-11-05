@@ -896,7 +896,7 @@ final class App
     /** Verificação de saúde SIMPLES (sem dados): para o supervisor local e monitoramento. */
     private static function health(): void
     {
-        try { $n = (int)Db::val('SELECT COUNT(*) FROM schema_migrations'); json_out(['ok' => true, 'db' => true, 'driver' => Db::$driver, 'migrations' => $n, 'env' => env('APP_ENV', 'production'), 'time' => now()]); }
+        try { $n = (int)Db::val('SELECT COUNT(*) FROM schema_migrations'); json_out(['ok' => true, 'db' => true, 'migrations' => $n, 'env' => env('APP_ENV', 'production'), 'time' => now()]); }
         catch (Throwable $e) { json_out(['ok' => false, 'db' => false], 503); }
     }
     /** Convite: o convidado define a PRÓPRIA senha com o token do e-mail. */
