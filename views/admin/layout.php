@@ -6,7 +6,7 @@ $nav = ['board' => ['/admin', 'Gestão de pedidos', 'orders', 'orders'], 'floor'
 Auth::start(); $flash = $_SESSION['flash'] ?? null; $flashErr = $_SESSION['flash_err'] ?? null; unset($_SESSION['flash'], $_SESSION['flash_err']);
 $isBoard = $page === 'admin/board';
 $agentCls = ['online' => 'ok', 'offline' => 'bad', 'never' => 'warn'][$agent['state']];
-$heading = $isBoard ? 'Gestão de pedidos' : $title;
+$heading = $isBoard ? 'Gestão de pedidos' : (in_array($page, ['admin/salao', 'admin/caixa', 'admin/executivo', 'admin/reports', 'admin/history', 'admin/customers', 'admin/menu', 'admin/stations', 'admin/config', 'admin/users', 'admin/access'], true) ? ($nav[$activeNav][1] ?? $title) : $title);
 $ic = fn(string $n, string $cls = 'ic') => '<svg class="' . $cls . '" aria-hidden="true" focusable="false"><use href="#i-' . $n . '"/></svg>';
 ?><!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><?php require APP_ROOT . '/views/_icons_head.php'; ?>

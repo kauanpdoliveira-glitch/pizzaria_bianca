@@ -424,6 +424,16 @@
 
   const initial = parseInt(location.hash.slice(1), 10); if (initial) S.sel = initial;
   render(true); poll().then(() => { if (S.sel != null && !S.map.has(S.sel)) loadOne(S.sel); });
-  setInterval(poll, 5000); setInterval(() => render(), 30000); // 30 s: só atualiza "há X min"
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+  // Atualização: polling incremental (?rev=) com agenda ÚNICA (sem setInterval concorrente), mais lento em aba oculta,
+  // recuo progressivo com jitter após falhas e retomada imediata ao voltar à aba/rede. Um só pedido em voo por vez.
+  let pollTimer = null, inflight = false;
+  const nextDelay = () => { const base = document.hidden ? 20000 : 5000; return (S.fails ? Math.min(30000, base * 2 ** Math.min(S.fails, 3)) : base) + Math.random() * 600; };
+  const schedule = () => { clearTimeout(pollTimer); pollTimer = setTimeout(tick, nextDelay()); };
+  async function tick() { if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); }
+  const pollNow = async () => { clearTimeout(pollTimer); if (!inflight) { inflight = true; try { await poll(); } finally { inflight = false; } } schedule(); };
+  schedule(); setInterval(() => render(), 30000); // 30 s: só atualiza "há X min"
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollNow(); });
+  window.addEventListener('online', pollNow);
+  window.addEventListener('pagehide', () => { clearTimeout(pollTimer); });
+
 })();
