@@ -13,7 +13,7 @@ window.BiancaNewOrder = (() => {
   const rootOf = c => c.parent_id ? byId[c.parent_id] || c : c;
   const pizzaCats = r => cats.filter(c => c.is_pizza && rootOf(c).id === r.id);
   const isPizzaRoot = r => pizzaCats(r).length > 0;
-  const photo = (p, cls) => p.image ? h('img', { src: p.image, alt: '', loading: 'lazy', class: cls || 'no-ph' }) : h('span', { class: (cls || 'no-ph') + ' no-ph-empty', 'aria-hidden': 'true' }, ic('pizza'));
+  const photo = (p, cls) => p.image ? h('img', { src: p.image, alt: '', loading: 'lazy', class: cls || 'no-ph' }) : null;
   const sizeOf = (p, name) => (p.sizes || []).find(s => s.name === name && s.available);
   const optPrice = (o, size) => (o.size_prices && size && o.size_prices[size] != null) ? o.size_prices[size] : o.price_cents;
   const optVisible = (o, size) => o.available && !(o.size_restricted && size && !(o.size_prices && o.size_prices[size] != null));
@@ -80,7 +80,7 @@ window.BiancaNewOrder = (() => {
   }
   function catsPane() {
     const rs = M ? rootsList() : [];
-    return h('nav', { class: 'no-cats', 'aria-label': 'Categorias' }, h('h3', {}, 'Categorias'), ...rs.map(r => h('button', { class: 'no-cat', type: 'button', 'aria-current': S.rootId === r.id ? 'true' : null, onclick: () => pickRoot(r.id) }, ic(isPizzaRoot(r) ? 'pizza' : 'store'), h('span', {}, r.name))));
+    return h('nav', { class: 'no-cats', 'aria-label': 'Categorias' }, h('h3', {}, 'Categorias'), ...rs.map(r => h('button', { class: 'no-cat', type: 'button', 'aria-current': S.rootId === r.id ? 'true' : null, onclick: () => pickRoot(r.id) }, ic(isPizzaRoot(r) ? 'menu' : 'note'), h('span', {}, r.name))));
   }
   function pickRoot(id) {
     if (S.draft && S.draft.rootId !== id && !(S.draft.sel && S.draft.sel.length === 0 && !S.draft.size) && !confirm('Trocar de categoria descarta a montagem em andamento. Continuar?')) return;
@@ -199,10 +199,10 @@ window.BiancaNewOrder = (() => {
   function drawSummary() {
     const box = dlg.querySelector('#no-items'); if (!box) return; const L = S.lines && S.lines.lines;
     const dr = dlg.querySelector('#no-draft'), d = S.draft;
-    if (d && d.kind === 'pizza' && (d.size || d.sel.length)) { const names = d.sel.map(id => dpool(d).find(x => x.p.id === id).p.name); dr.hidden = false; dr.replaceChildren(h('b', {}, 'Pizza em montagem'), h('small', {}, [d.size || 'Tamanho a escolher', names.length ? names.join(' + ') : 'Sabores a escolher'].join(' · ')), S.draftLine && d.sel.length ? h('small', { class: 'muted' }, 'Prévia (ainda não está no total): ' + fmt(S.draftLine.total_cents)) : null); } else dr.hidden = true;
+    if (d && d.kind === 'pizza' && (d.size || d.sel.length)) { const names = d.sel.map(id => dpool(d).find(x => x.p.id === id).p.name); dr.hidden = false; dr.replaceChildren(...[h('b', {}, 'Pizza em montagem'), h('small', {}, [d.size || 'Tamanho a escolher', names.length ? names.join(' + ') : 'Sabores a escolher'].join(' · ')), S.draftLine && d.sel.length ? h('small', { class: 'muted' }, 'Prévia (ainda não está no total): ' + fmt(S.draftLine.total_cents)) : null].filter(Boolean)); } else dr.hidden = true;
     if (!S.items.length) box.replaceChildren(h('p', { class: 'muted' }, 'Nenhum item adicionado ao pedido.'));
     else box.replaceChildren(...S.items.map((it, i) => { const l = L && L[i];
-      return h('div', { class: 'no-it' }, h('span', { class: 'grow' }, h('b', {}, l ? `${l.name}${l.size_name ? ' (' + l.size_name + ')' : ''}` : '…'), l && l.flavors && l.flavors.length ? h('small', {}, l.flavors.map(n => '½ ' + n).join(' + ')) : null, l && l.options.length ? h('small', {}, l.options.map(o => o.name + (o.price_cents ? ` (+${fmt(o.price_cents)})` : '')).join(', ')) : null, it.payload.notes ? h('small', { class: 'obs' }, 'Obs.: ' + it.payload.notes) : null),
+      return h('div', { class: 'no-it' }, h('span', { class: 'grow' }, h('b', {}, l ? `${l.name}${l.size_name ? ' (' + l.size_name + ')' : ''}` : '…'), l && l.flavors && l.flavors.length && !/½/.test(l.name) ? h('small', {}, l.flavors.map(n => '½ ' + n).join(' + ')) : null,l && l.options.length ? h('small', {}, l.options.map(o => o.name + (o.price_cents ? ` (+${fmt(o.price_cents)})` : '')).join(', ')) : null, it.payload.notes ? h('small', { class: 'obs' }, 'Obs.: ' + it.payload.notes) : null),
         h('b', {}, l ? fmt(l.total_cents) : ''), h('span', { class: 'no-it-act' }, qtyCtl(it.payload.qty, v => { it.payload.qty = v; if (it.spec) it.spec.qty = v; requote(); }), h('button', { class: 'b ghost sm', type: 'button', onclick: () => editItem(i) }, 'Editar'), h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remover item ' + (i + 1), onclick: () => { S.items.splice(i, 1); if (S.edIdx === i) { S.edIdx = null; S.draft = null; } requote(); render(); } }, ic('x')))); }));
     const tots = dlg.querySelector('#no-tots'), r = S.lines; const f = form();
     if (!r) { tots.replaceChildren(); } else {
